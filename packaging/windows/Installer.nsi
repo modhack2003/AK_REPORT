@@ -71,6 +71,13 @@ Section "Install"
   ExecWait '"$PLUGINSDIR\VC_redist.x64.exe" /install /quiet /norestart' $0
   ${If} $0 == 3010
     SetRebootFlag true
+  ${ElseIf} $0 == 1638
+    ; A newer compatible redistributable can already be present (e.g. Visual Studio).
+    ReadRegDWORD $1 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Installed"
+    ${If} $1 != 1
+      MessageBox MB_OK|MB_ICONSTOP "A conflicting Visual C++ prerequisite was detected. Resolve it and retry setup."
+      Abort
+    ${EndIf}
   ${ElseIf} $0 != 0
     MessageBox MB_OK|MB_ICONSTOP "The Microsoft Visual C++ prerequisite could not install (code $0). Resolve the prerequisite and retry setup."
     Abort

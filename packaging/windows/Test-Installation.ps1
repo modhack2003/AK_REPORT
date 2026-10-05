@@ -41,6 +41,13 @@ foreach ($service in @('AKReportingDatabase','AKReportingHost')) {
     Assert ($details.StartName -eq 'NT AUTHORITY\LocalService') 'Service must not run as LocalSystem or the installing user.'
 }
 Assert ((Api 'health/live').status -eq 'running') 'HTTPS host readiness failed.'
+$client = Start-Process (Join-Path $install 'client/AkReporting.Desktop.exe') -PassThru
+try {
+    Start-Sleep -Seconds 3
+    $client.Refresh()
+    Assert (-not $client.HasExited) 'Installed net48 client exited during startup.'
+    Assert ($client.MainWindowTitle -like '*A K Diagnostic Reporting*') 'Installed reporting workspace did not create its main window.'
+} finally { if (-not $client.HasExited) { $client.Kill(); $client.WaitForExit() }; $client.Dispose() }
 foreach ($path in @('host/settings.dpapi','administration/owner.dpapi')) {
     $file = Join-Path $data $path
     Assert (Test-Path $file) 'Protected configuration missing.'
@@ -105,4 +112,14 @@ $newLogin = Api 'auth/login' @{ Username='install_qa_writer'; Password=$writerPa
 $newHeaders = @{ Authorization='Bearer ' + $newLogin.token }
 Assert ((Api "reports/$($report.reportId)?revision=1" -Headers $newHeaders).id -eq $report.id) 'Uninstall/reinstall did not preserve the saved report.'
 Run-Setup @('--remove-services')
-Write-Host 'PASS: offline payload installation, chosen accounts, trusted HTTPS, separate services, protected secrets, report/PDF, restart, repair, tamper rejection, uninstall/reinstall retention.'
+$clientInstaller = (Get-ChildItem $PackageRoot -Filter 'AK-Reporting-Client-*-win-x64.exe' | Select-Object -First 1).FullName
+$clientInstalled = Start-Process $clientInstaller -ArgumentList '/S' -Wait -PassThru
+Assert ($clientInstalled.ExitCode -eq 0) 'Client-only installation failed.'
+$clientRoot = Join-Path $env:ProgramFiles 'AK Diagnostic Reporting Client'
+Assert (Test-Path (Join-Path $clientRoot 'client/AkReporting.Desktop.exe')) 'Client-only executable missing.'
+Assert (-not (Test-Path (Join-Path $clientRoot 'host'))) 'Client-only installer included a database/API host.'
+Assert ($null -eq (Get-Service AKReportingHost -ErrorAction SilentlyContinue)) 'Client-only installer recreated a host service.'
+$clientRemoved = Start-Process (Join-Path $clientRoot 'Uninstall.exe') -ArgumentList @('/S',"_?=$clientRoot") -Wait -PassThru
+Assert ($clientRemoved.ExitCode -eq 0) 'Client-only uninstall failed.'
+Assert (Test-Path (Join-Path $data 'postgres-data/PG_VERSION')) 'Client-only uninstall affected retained server data.'
+Write-Host 'PASS: offline full/client packages, installed WPF launch, chosen accounts, trusted HTTPS, separate services, protected secrets, report/PDF, restart, repair, tamper rejection, uninstall/reinstall retention.'
