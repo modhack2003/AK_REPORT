@@ -60,8 +60,13 @@ try {
 } finally { $rsa.Dispose(); $server.Dispose() }
 $client = Start-Process (Join-Path $install 'client/AkReporting.Desktop.exe') -PassThru
 try {
-    Start-Sleep -Seconds 3
-    $client.Refresh()
+    # First net48/WPF startup can need JIT/font loading on a busy clean runner.
+    # Wait for the actual workspace rather than assuming it appears in three seconds.
+    $windowDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        Start-Sleep -Milliseconds 250
+        $client.Refresh()
+    } while (-not $client.HasExited -and $client.MainWindowTitle -notlike '*A K Diagnostic Reporting*' -and [DateTime]::UtcNow -lt $windowDeadline)
     Assert (-not $client.HasExited) 'Installed net48 client exited during startup.'
     Assert ($client.MainWindowTitle -like '*A K Diagnostic Reporting*') 'Installed reporting workspace did not create its main window.'
 } finally { if (-not $client.HasExited) { $client.Kill(); $client.WaitForExit() }; $client.Dispose() }
