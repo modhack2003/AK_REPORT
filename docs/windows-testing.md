@@ -4,6 +4,8 @@ Use the **full Setup** executable on each independent test PC. The **Client** ex
 
 ## Download and install
 
+The [verified 0.1.1 package and executed-check record](windows-installer-evidence.md) links to the tested download and its exact hashes.
+
 1. Download the `windows-installers` artifact from the successful **Windows installation package** GitHub Actions run. Extract the ZIP.
 2. Verify the executable's SHA-256 against `SHA256SUMS.txt` (PowerShell: `Get-FileHash .\AK-Reporting-Setup-*.exe -Algorithm SHA256`). The build is an unsigned engineering installer; publisher/signing acceptance is pending.
 3. Run `AK-Reporting-Setup-<version>-win-x64.exe`. Approve its administrator/UAC request.

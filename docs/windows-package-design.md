@@ -23,6 +23,8 @@ Configuration/migration/users/drafts are provisioned before host readiness is de
 
 ## Verification and release
 
+Executed installation results, source identity and the downloadable 0.1.1 package are recorded in [installer evidence](windows-installer-evidence.md).
+
 Build workflow pins/checks the PostgreSQL archive and compiler, verifies Microsoft redistributable signature, publishes self-contained payloads, compiles installers and creates SHA-256 manifests. Windows smoke test installs silently, provisions synthetic accounts through standard input (no password CLI arguments), verifies trusted HTTPS, authenticates/writes/renders, restarts services, repairs without data loss, uninstalls and confirms data retention. Artifacts contain installers/docs/manifests only, not the smoke database or credentials.
 
 Windows CI is service/install evidence on its runner OS. User Win10/Win11 UI, printer/pad, reboot and offline acceptance still belongs to issue #4. Packages are unsigned engineering builds until an authorized signing certificate is provided. No medical configuration approval is implied by successful installation.

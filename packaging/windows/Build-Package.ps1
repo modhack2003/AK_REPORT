@@ -56,7 +56,8 @@ foreach ($item in @(@('AkReporting.Api','host'),@('AkReporting.WindowsSetup','se
 }
 $documentation = Join-Path $payload 'docs'
 New-Item -ItemType Directory -Force -Path $documentation | Out-Null
-Copy-Item (Join-Path $repo 'docs/windows-testing.md'),(Join-Path $repo 'docs/backup-restore.md'),(Join-Path $repo 'THIRD_PARTY_NOTICES.md') $documentation
+Copy-Item (Join-Path $repo 'docs/windows-testing.md'),(Join-Path $repo 'docs/windows-installer-evidence.md'),
+    (Join-Path $repo 'docs/testing.md'),(Join-Path $repo 'docs/backup-restore.md'),(Join-Path $repo 'THIRD_PARTY_NOTICES.md') $documentation
 Copy-Item (Join-Path $PSScriptRoot 'README-FIRST.txt') $release
 Copy-Item (Join-Path $PSScriptRoot 'README-FIRST.txt') $documentation
 Copy-Item (Join-Path $nsisExtract 'nsis-3.11/COPYING') (Join-Path $documentation 'NSIS-License.txt')

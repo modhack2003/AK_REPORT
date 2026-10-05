@@ -33,7 +33,8 @@ is required before a production release; do not disable Windows security feature
 
 If setup fails: note the displayed stage, check Windows Services and port conflicts,
 then run Local Setup and Repair again. Do not delete/reinitialize the saved database.
-An administrator can read administration\setup-status.log (stage/error type only).
+An administrator can read administration\setup-status.log (stage/error type, tool exit
+codes and initialization diagnostics; no credentials or report values).
 Report issues without patient names, signatures, passwords or private keys.
 
 Read docs\windows-testing.md for the acceptance checklist and docs\backup-restore.md
