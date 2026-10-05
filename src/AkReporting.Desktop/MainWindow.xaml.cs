@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AkReporting.Contracts;
 using Microsoft.Win32;
@@ -37,11 +40,15 @@ namespace AkReporting.Desktop
         public MainWindow()
         {
             InitializeComponent();
+            Width = Math.Max(MinWidth, Math.Min(Width, SystemParameters.WorkArea.Width));
+            Height = Math.Max(MinHeight, Math.Min(Height, SystemParameters.WorkArea.Height));
             Endpoint.Text = Environment.GetEnvironmentVariable("AK_API_URL") ?? "https://localhost:7043";
             AlignmentBox.ItemsSource = Enum.GetValues(typeof(Contracts.TextAlignment)); AlignmentBox.SelectedIndex = 0;
             FontFamilyBox.ItemsSource = new[] { "Noto Sans", "Noto Serif" }; FontFamilyBox.SelectedIndex = 0;
             Metadata.Load(new ReportMetadata());
             Metadata.Edited += (_, __) => MarkDirty(); ResultsEditor.Edited += (_, __) => MarkDirty();
+            Catalog.LibraryChanged += async (_, __) => { if (api?.LoggedIn == true) await Run(RefreshDoctorLibrary); };
+            Loaded += async (_, __) => await ShowStartup();
             InputManager.Current.PreProcessInput += InputActivity;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
             timer.Tick += async (_, __) =>
@@ -64,15 +71,43 @@ namespace AkReporting.Desktop
             Closed += (_, __) => { navigation.Invalidate(); timer.Stop(); InputManager.Current.PreProcessInput -= InputActivity; api?.Dispose(); };
             Closing += (_, e) => { if (!Discard()) e.Cancel = true; };
             loading = false;
+            UpdateActions();
+        }
+        private async Task ShowStartup()
+        {
+            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "AK Diagnostic Reporting", "branding", "logo.png");
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.UriSource = new Uri(path); image.EndInit(); image.Freeze();
+                    foreach (var logo in new[] { SplashLogo, LoginLogo, HeaderLogo }) { logo.Source = image; logo.Visibility = Visibility.Visible; }
+                }
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is NotSupportedException || error is ArgumentException) { }
+            await Task.Delay(1000);
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(250));
+            fade.Completed += (_, __) => { SplashPanel.Visibility = Visibility.Collapsed; Username.Focus(); };
+            SplashPanel.BeginAnimation(OpacityProperty, fade);
+            Status.Text = "Sign in to start. Your administrator and writer use the same login page.";
+        }
+        private void UpdateActions()
+        {
+            if (SaveButton == null) return;
+            ResultForm.IsEnabled = current != null;
+            SaveButton.IsEnabled = current != null; SavePreviewButton.IsEnabled = current != null;
+            AddTestsButton.Visibility = selectedCase != null ? Visibility.Visible : Visibility.Collapsed;
+            CreateButton.Visibility = selectedCase != null && current != null ? Visibility.Collapsed : Visibility.Visible;
+            PreviewHint.Visibility = plan == null ? Visibility.Visible : Visibility.Collapsed;
         }
         private void InputActivity(object sender, PreProcessInputEventArgs args) => lastInput = DateTime.UtcNow;
-        private void MarkDirty() { if (!loading) { dirty = true; plan = null; Preview.Document = null; } }
+        private void MarkDirty() { if (!loading) { dirty = true; plan = null; Preview.Document = null; SaveState.Text = "Unsaved changes — choose Save draft or Save & preview."; UpdateActions(); } }
         private bool Discard() => !(dirty || Reason.Text.Length > 0 || AuthorizationBasis.Text.Length > 0) ||
             MessageBox.Show("Discard the unsaved entries in the current editor?", "Unsaved entries", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
         private async Task Run(Func<Task> action)
         {
             if (busy) return;
-            busy = true; Root.IsEnabled = false;
+            busy = true; Root.IsEnabled = false; BusyIndicator.Visibility = Visibility.Visible;
             try { await action(); }
             catch (ApiException e)
             {
@@ -83,7 +118,7 @@ namespace AkReporting.Desktop
             catch (HttpRequestException) { HostUnavailable(); }
             catch (TaskCanceledException) { HostUnavailable(); }
             catch (Exception e) { Status.Text = e is ArgumentException || e is InvalidOperationException || e is FormatException ? e.Message : "Operation failed. Check the application host, network, printer or selected protected folder."; }
-            finally { busy = false; Root.IsEnabled = true; }
+            finally { busy = false; Root.IsEnabled = true; BusyIndicator.Visibility = Visibility.Collapsed; UpdateActions(); if (LoginPanel.Visibility == Visibility.Visible) LoginFeedback.Text = Status.Text; }
         }
         private void HostUnavailable() => Status.Text = "The application host is unavailable or the request timed out. Current editor entries remain on screen. After a save attempt, load the latest saved revision to check whether it completed.";
         private async void Login_Click(object sender, RoutedEventArgs e) => await Run(async () =>
@@ -95,21 +130,23 @@ namespace AkReporting.Desktop
                 finally { LockSession("Signed out."); api.Dispose(); }
             }
             api = new ApiClient(Endpoint.Text.Trim());
+            if (string.IsNullOrWhiteSpace(Username.Text) || Password.Password.Length == 0) throw new ArgumentException("Enter your username and password to sign in.");
             try { await api.Login(Username.Text.Trim(), Password.Password); } finally { Password.Clear(); }
-            Workspace.IsEnabled = true; lastInput = DateTime.UtcNow; dirty = false;
-            Catalog.Connect(api, text => Status.Text = text);
-            if (api.Role == "Administrator") { Tabs.SelectedIndex = 3; }
-            else
+            caseOffset = 0; caseQuery = "";
+            var cases = await api.Get<List<CaseSummary>>("cases");
+            if (api.Role != "Receptionist")
             {
-                caseOffset = 0; caseQuery = ""; Cases.ItemsSource = await api.Get<List<CaseSummary>>("cases");
-                if (api.Role != "Receptionist")
-                {
-                    templates = await api.Get<List<TemplateDefinition>>("templates");
-                    doctors = await api.Get<List<DoctorVersion>>("doctors");
-                    Investigations.ItemsSource = templates.GroupBy(t => t.ReportTypeCode).Select(g => g.OrderByDescending(t => t.Version).First()).ToList();
-                }
+                templates = await api.Get<List<TemplateDefinition>>("templates");
+                doctors = await api.Get<List<DoctorVersion>>("doctors");
+                Investigations.ItemsSource = templates.GroupBy(t => t.ReportTypeCode).Select(g => g.OrderByDescending(t => t.Version).First()).OrderBy(t => t.Title).ToList();
             }
-            Status.Text = "Signed in as " + api.Role + ". Draft schemas require medical review before issue.";
+            Cases.ItemsSource = cases;
+            await Catalog.Connect(api, text => Status.Text = text);
+            AdministrationTab.Visibility = api.Role == "Administrator" || api.Role == "MedicalReviewer" ? Visibility.Visible : Visibility.Collapsed;
+            ManageButton.Visibility = AdministrationTab.Visibility;
+            Tabs.SelectedIndex = 0; Workspace.IsEnabled = true; Workspace.Visibility = Visibility.Visible; LoginPanel.Visibility = Visibility.Collapsed;
+            lastInput = DateTime.UtcNow; dirty = false; SignedInAs.Text = Username.Text.Trim() + " · " + api.Role;
+            Status.Text = "Welcome. Choose New report, enter a name and date, tick the test, then Continue to results.";
         });
         private async void Logout_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
@@ -125,6 +162,8 @@ namespace AkReporting.Desktop
             ResultsEditor.ClearProtectedState(); Metadata.Load(new ReportMetadata()); Catalog.ClearProtectedState(); Preview.Document = null; plan = null;
             templates.Clear(); doctors.Clear(); CaseQuery.Clear(); Reason.Clear(); AuthorizationBasis.Clear(); ReportTitle.Text = "Select a saved report";
             pendingReports.Clear(); caseOperation = Guid.NewGuid(); caseOffset = 0; caseQuery = ""; dirty = false; loading = false; Status.Text = message;
+            Workspace.Visibility = Visibility.Collapsed; LoginPanel.Visibility = Visibility.Visible; LoginFeedback.Text = message; Password.Clear(); SignedInAs.Text = "";
+            UpdateActions();
         }
         private void ClearReportEditor()
         {
@@ -132,6 +171,7 @@ namespace AkReporting.Desktop
             History.ItemsSource = null; Doctors.ItemsSource = null;
             ResultsEditor.ClearProtectedState(); Metadata.Load(new ReportMetadata()); Preview.Document = null; plan = null;
             Reason.Clear(); AuthorizationBasis.Clear(); ReportTitle.Text = "Select a saved report"; dirty = false;
+            SaveState.Text = "Choose a patient and test in step 1."; UpdateActions();
         }
         private void ClearReportSelection()
         {
@@ -166,18 +206,26 @@ namespace AkReporting.Desktop
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest()));
         private async void Search_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest { Query = CaseQuery.Text }));
         private async void Older_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest { Query = caseQuery, Offset = caseOffset + 100 }));
-        private void NewCase_Click(object sender, RoutedEventArgs e) { if (!Discard()) return; ClearReportSelection(); caseOperation = Guid.NewGuid(); Tabs.SelectedIndex = 0; }
+        private void NewCase_Click(object sender, RoutedEventArgs e) { if (!Discard()) return; ClearReportSelection(); Investigations.UnselectAll(); caseOperation = Guid.NewGuid(); Tabs.SelectedIndex = 0; Status.Text = "New report: enter the patient name, choose the date and tick at least one test."; UpdateActions(); }
         private async void Create_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             if (current != null) throw new ArgumentException("Choose New case before creating another case. Use Add investigations for the selected case.");
             var metadata = Metadata.Read();
+            if (api!.Role != "Receptionist" && Investigations.SelectedItems.Count == 0) throw new ArgumentException("Choose at least one test in step 1 to continue.");
             var c = await api!.Post<CaseSummary>("cases", new CreateCaseRequest { OperationId = caseOperation, Patient = metadata.Patient });
             selectedCase = c;
             if (api.Role != "Receptionist") await AddInvestigations(c, metadata);
+            var cases = await api.Get<List<CaseSummary>>("cases");
+            var reports = api.Role == "Receptionist" ? new List<ReportSummary>() : await api.Get<List<ReportSummary>>("cases/" + c.Id + "/reports");
+            var first = reports.FirstOrDefault();
+            var revision = first == null ? null : await FetchLatestRevision(first.Id);
+            loading = true;
+            try { Cases.ItemsSource = cases; Cases.SelectedItem = cases.FirstOrDefault(x => x.Id == c.Id); Reports.ItemsSource = reports; Reports.SelectedItem = first; }
+            finally { loading = false; }
+            if (revision != null) { LoadRevision(revision); selectedReport = first; Tabs.SelectedIndex = 1; }
             caseOperation = Guid.NewGuid(); dirty = false;
-            loading = true; Cases.ItemsSource = await api.Get<List<CaseSummary>>("cases"); Cases.SelectedItem = ((List<CaseSummary>)Cases.ItemsSource).Single(x => x.Id == c.Id); loading = false;
-            if (api.Role != "Receptionist") Reports.ItemsSource = await api.Get<List<ReportSummary>>("cases/" + c.Id + "/reports");
-            Status.Text = "Case saved; each investigation is an independent draft report.";
+            pendingReports.Clear();
+            Status.Text = "Report created. Enter available results; blank optional details stay blank. Choose Save & preview when ready.";
         });
         private async Task AddInvestigations(CaseSummary c, ReportMetadata metadata)
         {
@@ -197,14 +245,16 @@ namespace AkReporting.Desktop
             }
             // Keep completed operation IDs until the whole batch succeeds, so a partial
             // network failure and retry cannot recreate investigations already committed.
-            foreach (TemplateDefinition t in Investigations.SelectedItems) pendingReports.Remove(c.Id + "/" + t.VersionId);
+            // The caller releases IDs only after the refreshed report list is received.
         }
         private async void AddReports_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             if (selectedCase == null) throw new ArgumentException("Select a case first.");
+            if (Investigations.SelectedItems.Count == 0) throw new ArgumentException("Tick at least one test in Patient & test before adding reports.");
             if (dirty && current != null) throw new ArgumentException("Save the current report before adding investigations.");
             await AddInvestigations(selectedCase, Metadata.Read());
             Reports.ItemsSource = await api!.Get<List<ReportSummary>>("cases/" + selectedCase.Id + "/reports"); Status.Text = "Selected investigations added as separate reports.";
+            foreach (TemplateDefinition t in Investigations.SelectedItems) pendingReports.Remove(selectedCase.Id + "/" + t.VersionId);
         });
         private async void Cases_Changed(object sender, SelectionChangedEventArgs e)
         {
@@ -273,6 +323,9 @@ namespace AkReporting.Desktop
                 if (!preserveHistory) History.ItemsSource = null;
                 else History.SelectedItem = revision;
                 Reason.Clear(); AuthorizationBasis.Clear(); Preview.Document = null; plan = null; dirty = false;
+                SaveState.Text = "Saved revision " + revision.Number + " · " + revision.State + ". Blank fields are allowed in a draft.";
+                IssuePanel.IsEnabled = selectedTemplate.ReviewStatus == ReviewStatus.Approved;
+                UpdateActions();
             }
             finally { loading = false; }
         }
@@ -292,7 +345,8 @@ namespace AkReporting.Desktop
             if (!savedOnly && current.Number != selectedReport?.CurrentRevision) throw new ArgumentException("Load the latest revision before correcting or issuing.");
             if (savedOnly && dirty) throw new ArgumentException("Save a new revision before preview, generation or printing.");
         }
-        private async void Save_Click(object sender, RoutedEventArgs e) => await Run(async () =>
+        private async void Save_Click(object sender, RoutedEventArgs e) => await Run(SaveDraft);
+        private async Task SaveDraft()
         {
             RequireCurrent(false);
             var report = selectedReport!;
@@ -302,7 +356,30 @@ namespace AkReporting.Desktop
                 LoadRevision(ValidateRevision(saved, report.Id)); report.CurrentRevision = saved.Number;
                 Status.Text = "Revision " + saved.Number + " saved. Previous revisions preserved.";
             }, RestoreSelections);
-        });
+        }
+        private async void SavePreview_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (dirty) await SaveDraft(); RequireCurrent(true); await PreviewSaved(); Tabs.SelectedIndex = 2; });
+        private async void RefreshDoctors_Click(object sender, RoutedEventArgs e) => await Run(RefreshDoctorLibrary);
+        private async Task RefreshDoctorLibrary()
+        {
+            var refreshed = await api!.Get<List<DoctorVersion>>("doctors");
+            doctors = refreshed;
+            if (current != null)
+            {
+                var pinned = (Doctors.SelectedItem as DoctorVersion)?.Id ?? Guid.Empty;
+                var options = new List<DoctorVersion> { new DoctorVersion { Id = Guid.Empty, DisplayName = "No doctor selected (optional)" } };
+                options.AddRange(doctors.Where(d => d.Active));
+                if (pinned != Guid.Empty && options.All(d => d.Id != pinned) && Doctors.SelectedItem is DoctorVersion previous) options.Add(previous);
+                loading = true;
+                try { Doctors.ItemsSource = options; Doctors.SelectedItem = options.Single(d => d.Id == pinned); }
+                finally { loading = false; }
+            }
+            Status.Text = "Doctor library refreshed. Select the doctor whose signature/stamp belongs on this report.";
+        }
+        private void Manage_Click(object sender, RoutedEventArgs e) => Tabs.SelectedIndex = 3;
+        private void Tabs_Changed(object sender, SelectionChangedEventArgs e) { if (e.Source == Tabs && Tabs.SelectedIndex == 0) UpdateActions(); }
+        private void Search_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; Search_Click(sender, e); } }
+        private void Login_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; Login_Click(sender, e); } }
+        private void Help_Click(object sender, RoutedEventArgs e) => MessageBox.Show("NEW REPORT\n1. Choose New report. Enter patient name and report date.\n2. Tick the test(s), then Continue to results.\n3. Enter available results. Doctor, age, notes and sample details are optional for drafts.\n4. Choose Save & preview, then Export PDF, Export Word or Print A4.\n\nSAVED REPORT\nSearch/select a patient on the left, then select their report.\n\nADMINISTRATOR\nUse Doctors & settings to add a doctor or update signature/stamp. Both administrators and writers can prepare reports.\n\nDraft configurations remain visibly marked until qualified medical review.", "Quick start", MessageBoxButton.OK, MessageBoxImage.Information);
         private async void Issue_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             RequireCurrent(false); if (dirty) throw new ArgumentException("Save the corrected draft before issuing.");
@@ -354,6 +431,7 @@ namespace AkReporting.Desktop
         {
             RequireCurrent(true); plan = await api!.Get<PagePlan>("reports/" + current!.ReportId + "/preview?revision=" + current.Number);
             Preview.Document = PagePresenter.Document(plan); Status.Text = "Saved revision preview: " + plan.Pages.Count + " A4 page(s).";
+            UpdateActions();
         }
         private async void Preview_Click(object sender, RoutedEventArgs e) => await Run(PreviewSaved);
         private async void Print_Click(object sender, RoutedEventArgs e) => await Run(async () => { await PreviewSaved(); PagePresenter.Print(plan!); Status.Text = "Print dialog completed. Verify physical output; spool submission does not confirm printing."; });

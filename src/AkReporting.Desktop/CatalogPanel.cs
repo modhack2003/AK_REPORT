@@ -15,29 +15,37 @@ namespace AkReporting.Desktop
     {
         private ApiClient api = null!;
         private Action<string> status = null!;
-        private byte[]? signature;
-        private byte[]? stamp;
+        private DoctorLibraryPanel? library;
+        public event EventHandler? LibraryChanged;
         public void ClearProtectedState()
         {
-            Children.Clear(); signature = null; stamp = null; api = null!; status = null!;
+            library?.ClearProtectedState(); library = null; Children.Clear(); api = null!; status = null!;
         }
-        public void Connect(ApiClient client, Action<string> notify)
+        public async Task Connect(ApiClient client, Action<string> notify)
         {
             api = client; status = notify; Children.Clear();
             if (api.Role == "Administrator") AdminControls();
             if (api.Role == "MedicalReviewer") ReviewControls();
             if (api.Role != "Administrator" && api.Role != "MedicalReviewer")
                 Children.Add(new TextBlock { Text = "Catalog changes require the administrator or qualified reviewer role." });
+            if (library != null) await library.Refresh();
         }
         private void AdminControls()
         {
+            library = new DoctorLibraryPanel(api, status); library.LibraryChanged += (_, __) => LibraryChanged?.Invoke(this, EventArgs.Empty);
+            Children.Add(library);
+            var advanced = new StackPanel();
+            var details = new Expander { Header = "Users, configuration and centre settings", Content = advanced, IsExpanded = false };
+            Children.Add(details);
+            // Build the less frequent administrative controls inside a collapsed group.
+            var start = Children.Count;
             Title("User provisioning");
             var username = Field("Username"); var password = new PasswordBox { Padding = new Thickness(6) }; Children.Add(password);
             var role = new ComboBox { ItemsSource = new[] { "Writer", "Receptionist", "MedicalReviewer", "Administrator" }, SelectedIndex = 0 }; Children.Add(role);
             Button("Create user", async () => { await api.Post<object>("users", new CreateUserRequest { Username = username.Text, Password = password.Password, Role = (string)role.SelectedItem }); password.Clear(); status("User created."); });
             Title("Versioned templates");
             Children.Add(new TextBlock { Text = "Draft imports are developer-maintained definitions. Medical approval is a separate qualified-reviewer action." });
-            Button("Install five candidate draft schemas", async () => { await api.Post<object?>("templates/seed-candidates", new { }); status("Five draft schemas installed. Sign in as a writer to begin engineering validation."); });
+            Button("Install five candidate draft schemas", async () => { await api.Post<object?>("templates/seed-candidates", new { }); status("Five draft schemas installed. Choose New report to begin."); });
             Button("Import draft template JSON", async () =>
             {
                 var dialog = new OpenFileDialog { Filter = "Template JSON|*.json", Multiselect = false };
@@ -46,25 +54,10 @@ namespace AkReporting.Desktop
                 var template = JsonConvert.DeserializeObject<TemplateDefinition>(File.ReadAllText(dialog.FileName), new JsonSerializerSettings { MaxDepth = 32 }) ?? throw new ArgumentException("Invalid template definition.");
                 await api.Post<TemplateDefinition>("templates", template); status("New draft template version stored.");
             });
-            Title("Doctor / signature library — center-supplied details only");
-            var name = Field("Actual name"); var display = Field("Display name"); var qualification = Field("Qualification (as supplied)");
-            var designation = Field("Designation"); var registration = Field("Registration number"); var specialty = Field("Specialty");
-            var evidence = Field("Permission / actual attribution-process evidence"); var existingId = Field("Doctor UUID for a new version (leave empty for new doctor)");
-            Button("Choose authorized signature PNG", () => { signature = Image(); status("Signature selected in memory."); return Task.CompletedTask; });
-            Button("Choose authorized stamp PNG", () => { stamp = Image(); status("Stamp selected in memory."); return Task.CompletedTask; });
-            Button("Save immutable doctor version", async () =>
-            {
-                var doctor = new DoctorVersion { DoctorId = string.IsNullOrWhiteSpace(existingId.Text) ? Guid.Empty : Guid.Parse(existingId.Text), Name = name.Text,
-                    DisplayName = display.Text, Qualification = qualification.Text, Designation = designation.Text, RegistrationNumber = registration.Text,
-                    Specialty = specialty.Text, PermissionEvidence = evidence.Text, SignaturePng = signature, StampPng = stamp };
-                var saved = await api.Post<DoctorVersion>("doctors/versions", doctor); existingId.Text = saved.DoctorId.ToString();
-                signature = null; stamp = null; status("Doctor version " + saved.Version + " stored. Doctor UUID: " + saved.DoctorId);
-            });
-            Button("Set selected doctor inactive", async () => { await api.Post<object?>("doctors/" + Guid.Parse(existingId.Text) + "/active/false", new { }); status("Doctor inactive. Historical attribution remains pinned."); });
-            Button("Set selected doctor active", async () => { await api.Post<object?>("doctors/" + Guid.Parse(existingId.Text) + "/active/true", new { }); status("Doctor active."); });
             Title("Center settings"); var center = Field("Center display name"); var prefix = Field("Report-number prefix"); var days = Field("Retention days (state-based, no automatic deletion)");
             Button("Load settings", async () => { var settings = await api.Get<CenterSettings>("settings"); center.Text = settings.CenterName; prefix.Text = settings.ReportPrefix; days.Text = settings.RetentionDays.ToString(CultureInfo.InvariantCulture); });
             Button("Save settings", async () => { await api.Post<object?>("settings", new CenterSettings { CenterName = center.Text, ReportPrefix = prefix.Text, RetentionDays = int.Parse(days.Text, CultureInfo.InvariantCulture) }); status("Settings stored; existing report IDs and template offsets remain pinned."); });
+            while (Children.Count > start) { var child = Children[start]; Children.RemoveAt(start); advanced.Children.Add(child); }
         }
         private void ReviewControls()
         {
@@ -93,13 +86,6 @@ namespace AkReporting.Desktop
                 finally { IsEnabled = true; }
             };
             Children.Add(button);
-        }
-        private static byte[]? Image()
-        {
-            var dialog = new OpenFileDialog { Filter = "PNG image|*.png", Multiselect = false };
-            if (dialog.ShowDialog() != true) return null;
-            if (new FileInfo(dialog.FileName).Length > 2 * 1024 * 1024) throw new ArgumentException("PNG asset exceeds 2 MiB.");
-            return File.ReadAllBytes(dialog.FileName);
         }
     }
 }
