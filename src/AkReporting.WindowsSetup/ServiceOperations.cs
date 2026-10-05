@@ -4,6 +4,16 @@ using Microsoft.Win32;
 
 namespace AkReporting.WindowsSetup;
 
+internal sealed class SetupToolException(string tool, int exitCode, string diagnostics)
+    : InvalidOperationException(tool + " failed, exit code " + exitCode + ".")
+{
+    public string Tool { get; } = tool;
+    public int ExitCode { get; } = exitCode;
+    // initdb runs before any application users/results exist. Only its diagnostics
+    // are retained; other tool output is discarded and command arguments are never logged.
+    public string InitializationDiagnostics { get; } = tool == "initdb.exe" ? diagnostics : "";
+}
+
 internal static class ServiceOperations
 {
     public static bool Exists(string name) => ServiceController.GetServices().Any(s => s.ServiceName == name);
@@ -53,7 +63,8 @@ internal static class ServiceOperations
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
         try { await process.WaitForExitAsync(timeout.Token); }
         catch { process.Kill(true); throw; }
-        await stdout; await stderr; // Tool output can contain installation paths; do not log arguments/secrets.
-        if (process.ExitCode != 0) throw new InvalidOperationException(Path.GetFileName(executable) + " failed, exit code " + process.ExitCode + ".");
+        await stdout;
+        var errorOutput = await stderr;
+        if (process.ExitCode != 0) throw new SetupToolException(Path.GetFileName(executable), process.ExitCode, errorOutput);
     }
 }

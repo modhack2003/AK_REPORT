@@ -71,14 +71,22 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
             if (Directory.EnumerateFileSystemEntries(cluster).Any())
                 throw new InvalidOperationException("Interrupted database initialization left nonempty data. Preserve it and consult the recovery guide; no files were deleted.");
             Step("Initializing isolated PostgreSQL cluster");
-            var pwfile = Path.Combine(root, "administration", "initdb-password.tmp");
-            // PostgreSQL launches a restricted child token on Windows. Temporarily grant
-            // the installing user's SID, rather than relying on its Administrators group.
+            var administration = Path.Combine(root, "administration");
+            var passwordFolder = Path.Combine(administration, "initialization");
+            var pwfile = Path.Combine(passwordFolder, "password.tmp");
+            // initdb drops its Administrators membership before reading its password
+            // file. Grant only traversal on parents and read access on an isolated
+            // temporary folder; protected owner configuration stays administrator-only.
             using var initializer = System.Security.Principal.WindowsIdentity.GetCurrent();
-            WindowsSecurity.DirectoryAcl(cluster, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.Modify, true),
-                (initializer.Name, FileSystemRights.Modify, true));
             try
             {
+                WindowsSecurity.DirectoryAcl(root, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.ReadAndExecute, false),
+                    ($"NT SERVICE\\{InstallationPaths.HostService}", FileSystemRights.ReadAndExecute, false),
+                    (initializer.Name, FileSystemRights.Traverse, false));
+                WindowsSecurity.DirectoryAcl(administration, (initializer.Name, FileSystemRights.Traverse, false));
+                WindowsSecurity.DirectoryAcl(passwordFolder, (initializer.Name, FileSystemRights.ReadAndExecute, true));
+                WindowsSecurity.DirectoryAcl(cluster, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.Modify, true),
+                    (initializer.Name, FileSystemRights.Modify, true));
                 await File.WriteAllTextAsync(pwfile, new NpgsqlConnectionStringBuilder(owner.OwnerConnection).Password, new UTF8Encoding(false));
                 await ServiceOperations.Tool(Path.Combine(pgBin, "initdb.exe"), "-D", cluster, "-U", "ak_owner", "--pwfile=" + pwfile,
                     "--encoding=UTF8", "--locale=C", "--auth-local=scram-sha-256", "--auth-host=scram-sha-256");
@@ -86,7 +94,11 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
             finally
             {
                 if (File.Exists(pwfile)) File.Delete(pwfile);
+                if (Directory.Exists(passwordFolder)) Directory.Delete(passwordFolder);
+                WindowsSecurity.DirectoryAcl(administration);
                 WindowsSecurity.DirectoryAcl(cluster, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.Modify, true));
+                WindowsSecurity.DirectoryAcl(root, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.ReadAndExecute, false),
+                    ($"NT SERVICE\\{InstallationPaths.HostService}", FileSystemRights.ReadAndExecute, false));
             }
         }
         else if ((await File.ReadAllTextAsync(Path.Combine(cluster, "PG_VERSION"))).Trim() != "17")
@@ -203,8 +215,19 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
     }
     public void RecordFailure(Exception error)
     {
-        // No exception messages, user input, credentials, SQL, names or results in setup diagnostics.
-        try { File.AppendAllText(Path.Combine(root, "administration", "setup-status.log"), DateTimeOffset.UtcNow.ToString("O") + " | " + Stage + " | " + error.GetType().Name + "\n"); }
+        // No general exception messages, arguments, credentials, SQL or results.
+        // initdb diagnostics are allowed only before application data exists.
+        try
+        {
+            var summary = DateTimeOffset.UtcNow.ToString("O") + " | " + Stage + " | " + error.GetType().Name;
+            if (error is SetupToolException tool)
+            {
+                summary += " | " + tool.Tool + " exit " + tool.ExitCode;
+                if (tool.InitializationDiagnostics.Length > 0)
+                    summary += "\n" + tool.InitializationDiagnostics[..Math.Min(tool.InitializationDiagnostics.Length, 4000)];
+            }
+            File.AppendAllText(Path.Combine(root, "administration", "setup-status.log"), summary + "\n");
+        }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }

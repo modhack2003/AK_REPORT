@@ -36,7 +36,7 @@ Return screenshots with synthetic data only, exact failing steps, OS build and d
 ## Troubleshooting
 
 * **Missing Framework 4.8:** install Microsoft's official offline prerequisite for that Windows edition, then retry. Most current Win10/11 PCs already have compatible 4.x.
-* **First-run error:** note the current stage. Check Windows Services for `AKReportingDatabase` and `AKReportingHost`, available disk space, and port conflicts on 55432/7043. An administrator can read `%ProgramData%\AK Diagnostic Reporting\administration\setup-status.log`; it records stage/error type, not credentials or clinical values.
+* **First-run error:** note the current stage. Check Windows Services for `AKReportingDatabase` and `AKReportingHost`, available disk space, and port conflicts on 55432/7043. An administrator can read `%ProgramData%\AK Diagnostic Reporting\administration\setup-status.log`; it records stage/error type and tool exit codes, not credentials or clinical values. Database initialization errors can also include `initdb` filesystem diagnostics from before application data exists.
 * **Interrupted initial account creation:** run Initialize/resume with the original administrator password and desired writer details. Repair without credentials is for a completed installation.
 * **Login cannot connect:** confirm both services are running and `https://localhost:7043/health/live` works with normal certificate trust. Never bypass TLS validation.
 * **Existing DB/configuration mismatch:** preserve ProgramData and use reviewed restore support. Setup refuses to reinitialize a nonempty unmatched cluster.
