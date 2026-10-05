@@ -5,6 +5,7 @@
 * Domain: explicit kinds, unknown/duplicate fields, table coordinates, optional visibility, required fields, metadata lengths, clinical-config gate, unsupported Unicode and controlled formatting.
 * Database: fresh migration, least-privilege runtime role, atomic IDs, case grouping, client-operation idempotency, concurrent revision conflicts, immutable historical snapshots, template/doctor changes, issue/correction, rollback, session idle expiry, lockout, hash verification, document access.
 * Rendering: synthetic CBC-001, CBC-002, LFT-001, URINE-001, HISTO-001 and ECG-001. Byte-repeatability, real PDF parser extraction/page count, page-plan geometry, long text/tokens, repeated table headers, pinned margins, signature/stamp placement, DOCX OpenXML validation and explicit page breaks.
+* `tests/AkReporting.Tests/Fixtures/golden-manifest.json` pins reviewed engineering fixture PDF/DOCX hashes and page counts. Hash changes require explicit artifact/layout inspection and a deliberate baseline update, not automatic regeneration in CI. These are software fixtures, not medically reviewed report examples.
 * ECHO-001/TMT-001: deliberately deferred until representative engine and medical schemas are approved; never create fake clinical fixtures merely to satisfy a name list.
 * API: authentication/roles, stale updates, errors, payload bounds, document authorization, no leakage to unauthenticated/receptionist requests.
 

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AkReporting.Application/AkReporting.Application.csproj" />
+    <PackageReference Include="Npgsql" Version="10.0.0" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <EmbeddedResource Include="../../database/migrations/*.sql" />
+  </ItemGroup>
+</Project>

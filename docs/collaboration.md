@@ -41,7 +41,15 @@ Never claim a pushed branch is already merged. Never overwrite remote history. I
 
 ## Current handoff
 
-* Empty-repository assessment and initial architecture/specification research completed.
+* Initial architecture/specification is published on `main` at `985635a`.
+* The verified five-report implementation checkpoint is on `agent/astra/five-report-foundation`; fetch that branch to build on its contracts before baseline integration is reviewed.
 * Center report samples, professional attribution records, letterhead dimensions, first-host OS and qualified clinical approval are outstanding.
 * Five candidate schemas must remain draft. Runtime/printer compatibility remains provisional until actual Windows hardware checks pass.
 * Follow `docs/milestones.md`; do not parallelize dozens of unreviewed report templates ahead of the engine.
+
+To start dependent work from the implementation checkpoint:
+
+```sh
+git fetch origin
+git switch -c agent/<your-name>/<task> origin/agent/astra/five-report-foundation
+```
