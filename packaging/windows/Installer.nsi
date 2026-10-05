@@ -194,5 +194,6 @@ Section "Uninstall"
 !else
   RMDir "$INSTDIR"
 !endif
-  ; Never delete ProgramData, PostgreSQL data, exports or backups.
+  ; ProgramData is removed only by the explicitly requested setup purge action.
+  ; Exports/backups outside the owned product folders are never searched or deleted.
 SectionEnd

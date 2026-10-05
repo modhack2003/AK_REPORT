@@ -30,8 +30,11 @@ function Click([string]$Id) {
     $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 function Api([string]$Path, $Body = $null, $Headers = @{}) {
-    if ($null -eq $Body) { return Invoke-RestMethod "$endpoint/$Path" -Headers $Headers }
-    return Invoke-RestMethod "$endpoint/$Path" -Method Post -Headers $Headers -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 20)
+    # Windows PowerShell 5.1 emits REST arrays as a single pipeline object.
+    # Materialize first so the function return enumerates collections normally.
+    if ($null -eq $Body) { $result = Invoke-RestMethod "$endpoint/$Path" -Headers $Headers }
+    else { $result = Invoke-RestMethod "$endpoint/$Path" -Method Post -Headers $Headers -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 20) }
+    return $result
 }
 function Capture([string]$Name) {
     if (-not $EvidenceRoot) { return }
