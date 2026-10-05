@@ -6,12 +6,15 @@ For Windows 10/11 x64. .NET Framework 4.8 (or later compatible 4.x) is required.
    The package includes its own API runtime, PostgreSQL binaries and Visual C++ prerequisite.
    No internet is needed while installing or reporting.
 2. At the finish page, run first-time setup. Choose separate administrator and writer
-   usernames/passwords (12–256 characters). Click Initialize / resume setup.
+   usernames/passwords (12–256 characters). Optionally upload your AK logo (PNG/JPEG).
+   Click Initialize / resume setup. Existing installations can choose Repair instead.
 3. Wait for Ready. Close setup and open the A K Diagnostic Reporting desktop shortcut
    normally (not as administrator). Keep https://localhost:7043 in the endpoint field.
-4. Sign in as the writer, create a synthetic patient case, select investigations,
-   enter results, save a revision, preview and export PDF/DOCX. Test your printer.
-5. Sign in as the administrator for user/doctor/draft-template maintenance.
+4. Administrators and writers use the same login and reporting workflow. Choose New
+   report, enter only patient name/date, tick tests and Continue to results. Optional
+   details may stay blank. Choose Save & preview, then export PDF/Word or print.
+5. Administrators use Doctors & settings to upload/update real authorized doctor
+   details, signatures/stamps. Writers can select a saved doctor on their report.
 
 Use invented software-test data only during acceptance. The bundled schemas are DRAFT;
 no units, reference intervals, diagnoses, professional credentials or clinical approval
@@ -23,8 +26,9 @@ API: localhost HTTPS port 7043. Database: loopback port 55432.
 No automatic LAN exposure. The Client installer is for an existing separately configured
 trusted HTTPS LAN host; use the full Setup package on each independent test PC.
 
-Uninstall removes services/application files but preserves the database and encrypted
-configuration. Reinstall in the original folder and choose Repair existing setup.
+Uninstall offers Remove application only (keep reports) or Remove everything (delete
+the local database, accounts, logo and configuration permanently). Default removal
+preserves data. Reinstall in the original folder and choose Repair existing setup.
 DPAPI secrets are machine-bound: use PostgreSQL backup/restore for moving computers.
 
 The engineering installers are not yet code-signed; verify SHA256SUMS.txt against the
@@ -37,5 +41,6 @@ An administrator can read administration\setup-status.log (stage/error type, too
 codes and initialization diagnostics; no credentials or report values).
 Report issues without patient names, signatures, passwords or private keys.
 
-Read docs\windows-testing.md for the acceptance checklist and docs\backup-restore.md
+Read docs\operator-guide.md for the quick workflow, docs\windows-testing.md for the
+acceptance checklist and docs\backup-restore.md
 for controlled backup/restore. Feedback belongs in GitHub issue #4 or #9.

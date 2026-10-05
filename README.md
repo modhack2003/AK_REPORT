@@ -14,6 +14,8 @@ The foundation is integrated into `main` through [PR #2](https://github.com/modh
 
 An **offline Windows 10/11 x64 test installer** is available from [the verified package download](docs/windows-installer-evidence.md). Full installation, trusted HTTPS, desktop launch, repair and uninstall/reinstall retention passed on Windows CI. Follow [Windows test instructions](docs/windows-testing.md). Packaging is published for review in [PR #10](https://github.com/modhack2003/AK_REPORT/pull/10).
 
+The **0.2.0 operator UX update** under [#11](https://github.com/modhack2003/AK_REPORT/issues/11) adds a shared login, supplied-logo splash, guided reporting with optional details, administrator reporting/doctor-image management, and complete-removal uninstall. Read the [operator guide](docs/operator-guide.md) and [agent handoff](docs/agent-handoff-operator-ux.md).
+
 ## Projects
 
 | Project | Responsibility |

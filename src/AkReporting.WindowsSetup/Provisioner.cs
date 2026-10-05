@@ -16,6 +16,7 @@ public sealed class InitialAccounts
     public string AdministratorPassword { get; set; } = "";
     public string WriterName { get; set; } = "";
     public string WriterPassword { get; set; } = "";
+    public byte[]? LogoPng { get; set; }
 }
 
 internal sealed class SetupReadinessException(string diagnostic)
@@ -34,6 +35,7 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
     public async Task Initialize(InitialAccounts request)
     {
         WindowsSecurity.RequireAdministrator(); WindowsSecurity.RejectReparsePath(install);
+        if (request.LogoPng != null) Branding.Validate(request.LogoPng);
         var hostExe = Path.Combine(install, "host", "AkReporting.Api.exe");
         var pgBin = Path.Combine(install, "postgres", "bin");
         if (!File.Exists(hostExe) || !File.Exists(Path.Combine(pgBin, "initdb.exe")))
@@ -131,6 +133,7 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
         var runtime = Connection("ak_reporting_app", owner.RuntimePassword, "ak_reporting");
         Step("Provisioning chosen accounts and draft schemas");
         await ProvisionAccounts(runtime, request);
+        if (request.LogoPng != null) { Step("Installing supplied centre logo"); Branding.Install(request.LogoPng); }
         Step("Configuring trusted local HTTPS");
         var settingsPath = InstallationPaths.HostSettings(root);
         var settings = File.Exists(settingsPath) ? ProtectedConfiguration.Read<InstalledHostSettings>(settingsPath) : new InstalledHostSettings();
@@ -237,6 +240,31 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+    }
+    public async Task Purge()
+    {
+        WindowsSecurity.RequireAdministrator(); WindowsSecurity.RejectReparsePath(root); WindowsSecurity.RejectReparsePath(install);
+        if (File.Exists(InstallationPaths.OwnerSettings(root)))
+        {
+            var owner = ProtectedConfiguration.Read<InstalledOwnerSettings>(InstallationPaths.OwnerSettings(root));
+            if (!string.Equals(owner.InstallRoot, install, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Complete removal must run from the original installation folder.");
+        }
+        // Check the entire owned tree before deleting. Never traverse a junction into another directory.
+        if (Directory.Exists(root)) CheckRemovalTree(new DirectoryInfo(root));
+        if (Directory.Exists(install)) CheckRemovalTree(new DirectoryInfo(install));
+        await Stop(remove: true);
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        progress("Complete removal: local report database, accounts, configuration and logo deleted.");
+    }
+    private static void CheckRemovalTree(DirectoryInfo directory)
+    {
+        foreach (var item in directory.EnumerateFileSystemInfos())
+        {
+            if ((item.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Complete removal found a linked path. Remove the link or use controlled cleanup; no report data was deleted.");
+            if (item is DirectoryInfo child) CheckRemovalTree(child);
+        }
     }
     private static string Connection(string user, string password, string database) => new NpgsqlConnectionStringBuilder
     { Host = "127.0.0.1", Port = InstallationPaths.DatabasePort, Database = database, Username = user, Password = password, Timeout = 10, CommandTimeout = 30 }.ConnectionString;

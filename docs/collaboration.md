@@ -50,6 +50,8 @@ Never claim a pushed branch is already merged. Never overwrite remote history. I
 
 Current next-work lanes:
 
+* [#11 — operator UX / branding / complete removal](https://github.com/modhack2003/AK_REPORT/issues/11): claimed on `agent/astra/operator-ux-20261005`, based on `18f8d6b` after installer PR #10 merged. Owns desktop UI, reporting-role/draft-note behavior, doctor asset route, setup/packaging and associated checks/docs. The published PR #8 recovery checkpoint is incorporated into this feature branch. Coordinate overlapping changes through #11. Read [current agent handoff](agent-handoff-operator-ux.md).
+
 * [#3 — v1 operator/revision/archive/recovery hardening](https://github.com/modhack2003/AK_REPORT/issues/3): split and claim modules before changing contracts/migrations.
 * [#4 — Windows/physical-printer acceptance](https://github.com/modhack2003/AK_REPORT/issues/4): actual OS/driver/pad evidence; first-host OS decision.
 * [#5 — center-specific medical review](https://github.com/modhack2003/AK_REPORT/issues/5): anonymized center samples, source/SOP reconciliation and actual qualified review.

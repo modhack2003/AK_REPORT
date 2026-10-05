@@ -3,6 +3,10 @@ Unicode true
 !include "LogicLib.nsh"
 !include "x64.nsh"
 !include "WinVer.nsh"
+!include "nsDialogs.nsh"
+!include "FileFunc.nsh"
+Var PurgeData
+Var PurgeRadio
 !ifdef CLIENT_ONLY
   !define PRODUCT "A K Reporting Client"
   !define FOLDER "AK Diagnostic Reporting Client"
@@ -33,6 +37,9 @@ VIAddVersionKey "LegalCopyright" "A K Diagnostic Centre & Polyclinic"
 !endif
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
+!ifndef CLIENT_ONLY
+  UninstPage custom un.RemovalOptions un.RemovalOptionsLeave
+!endif
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
@@ -53,6 +60,41 @@ Function .onInit
     Abort
   ${EndIf}
 FunctionEnd
+
+Function un.onInit
+  StrCpy $PurgeData 0
+!ifndef CLIENT_ONLY
+  ${GetParameters} $1
+  ClearErrors
+  ${GetOptions} $1 "/PURGE" $2
+  ${IfNot} ${Errors}
+    StrCpy $PurgeData 1
+  ${EndIf}
+!endif
+FunctionEnd
+
+!ifndef CLIENT_ONLY
+Function un.RemovalOptions
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateLabel} 0 0 100% 35u "Choose how to remove A K Diagnostic Reporting from this PC."
+  Pop $0
+  ${NSD_CreateRadioButton} 0 42u 100% 20u "Remove application only — keep reports for reinstallation"
+  Pop $0
+  ${NSD_Check} $0
+  ${NSD_CreateRadioButton} 0 75u 100% 20u "Remove everything — permanently delete local reports and accounts"
+  Pop $PurgeRadio
+  ${If} $PurgeData == 1
+    ${NSD_Check} $PurgeRadio
+  ${EndIf}
+  ${NSD_CreateLabel} 0 110u 100% 55u "Remove everything deletes this application's database, accounts, logo and protected configuration. This cannot be undone. Files you exported or backed up outside the application folders are left in their chosen locations."
+  Pop $0
+  nsDialogs::Show
+FunctionEnd
+Function un.RemovalOptionsLeave
+  ${NSD_GetState} $PurgeRadio $PurgeData
+FunctionEnd
+!endif
 
 Section "Install"
   SetShellVarContext all
@@ -119,7 +161,11 @@ Section "Uninstall"
   SetRegView 64
 !ifndef CLIENT_ONLY
   IfFileExists "$INSTDIR\setup\AkReporting.WindowsSetup.exe" 0 missing_setup
-    ExecWait '"$INSTDIR\setup\AkReporting.WindowsSetup.exe" --remove-services' $0
+    ${If} $PurgeData == 1
+      ExecWait '"$INSTDIR\setup\AkReporting.WindowsSetup.exe" --purge-data' $0
+    ${Else}
+      ExecWait '"$INSTDIR\setup\AkReporting.WindowsSetup.exe" --remove-services' $0
+    ${EndIf}
     ${If} $0 != 0
       MessageBox MB_OK|MB_ICONSTOP "Could not remove this installation's services. Application files and saved data are preserved. Repair setup and retry uninstall."
       Abort
@@ -139,6 +185,14 @@ Section "Uninstall"
   DeleteRegKey HKLM "Software\AKReporting\${FOLDER}"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${FOLDER}"
   Delete "$INSTDIR\Uninstall.exe"
+!ifndef CLIENT_ONLY
+  ${If} $PurgeData == 1
+    RMDir /r "$INSTDIR"
+  ${Else}
+    RMDir "$INSTDIR"
+  ${EndIf}
+!else
   RMDir "$INSTDIR"
+!endif
   ; Never delete ProgramData, PostgreSQL data, exports or backups.
 SectionEnd
