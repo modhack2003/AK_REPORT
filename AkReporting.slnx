@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AkReporting.Contracts/AkReporting.Contracts.csproj" />
+    <Project Path="src/AkReporting.Domain/AkReporting.Domain.csproj" />
+    <Project Path="src/AkReporting.Application/AkReporting.Application.csproj" />
+    <Project Path="src/AkReporting.Infrastructure/AkReporting.Infrastructure.csproj" />
+    <Project Path="src/AkReporting.Rendering/AkReporting.Rendering.csproj" />
+    <Project Path="src/AkReporting.Api/AkReporting.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/AkReporting.Tests/AkReporting.Tests.csproj" /></Folder>
+</Solution>
