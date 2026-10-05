@@ -8,6 +8,8 @@ using AkReporting.Infrastructure;
 using AkReporting.Rendering;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService(options => options.ServiceName = AkReporting.Deployment.InstallationPaths.HostService);
+var installedConnection = InstalledHost.Configure(builder, args);
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 8 * 1024 * 1024);
@@ -17,7 +19,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.RespectNullableAnnotations = true;
 });
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton(_ => new Database(Environment.GetEnvironmentVariable("AK_DB_CONNECTION")
+builder.Services.AddSingleton(_ => new Database(installedConnection ?? Environment.GetEnvironmentVariable("AK_DB_CONNECTION")
     ?? throw new InvalidOperationException("AK_DB_CONNECTION is required. Use protected service configuration.")));
 builder.Services.AddScoped<ICatalogRepository, PostgresCatalog>();
 builder.Services.AddScoped<IReportRepository, PostgresReports>();
