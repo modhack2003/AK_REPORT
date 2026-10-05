@@ -53,6 +53,11 @@ public static class CatalogEndpoints
             renderer.ValidateImage(doctor.SignaturePng); renderer.ValidateImage(doctor.StampPng);
             return await catalog.AddDoctorVersion(doctor, actor, ct);
         });
+        app.MapGet("/doctors/versions/{id:guid}", async (Guid id, HttpContext context, ICatalogRepository catalog, CancellationToken ct) =>
+        {
+            SessionMiddleware.RequireRole(context, "Administrator");
+            return await catalog.Doctor(id, ct);
+        });
         app.MapPost("/doctors/{id:guid}/active/{active:bool}", async (Guid id, bool active, HttpContext context, ICatalogRepository catalog, CancellationToken ct) =>
         {
             var actor = SessionMiddleware.RequireRole(context, "Administrator");

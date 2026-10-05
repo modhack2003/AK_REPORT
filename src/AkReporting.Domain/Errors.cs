@@ -7,6 +7,6 @@ public sealed class IntegrityException(string message) : Exception(message);
 
 public sealed record Actor(Guid Id, string Role)
 {
-    public bool CanWrite => Role is "Writer" or "MedicalReviewer";
+    public bool CanWrite => Role is "Administrator" or "Writer" or "MedicalReviewer";
     public bool CanCreateCases => CanWrite || Role is "Receptionist";
 }

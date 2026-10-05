@@ -18,15 +18,17 @@ public sealed class ReportService(IReportRepository reports, ICatalogRepository 
     public async Task<ReportRevision> Save(Guid id, SaveRevisionRequest request, Actor actor, CancellationToken ct)
     {
         RequireWriter(actor);
-        ReportValidator.Required(request.Reason, "Revision reason", 2000);
+        ReportValidator.Bounded(request.Reason, "Revision reason", 2000);
         var copy = Copy(request.Draft);
         var previous = await reports.Revision(id, null, ct);
+        if (previous.State == ReportState.Issued) ReportValidator.Required(request.Reason, "Correction reason", 2000);
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? "Draft updated" : request.Reason;
         var oldTemplate = await catalog.Template(previous.Data.TemplateVersionId, ct);
         var template = await catalog.Template(copy.TemplateVersionId, ct);
         if (template.ReportTypeCode != oldTemplate.ReportTypeCode) throw new ValidationException("Cannot change the report family in a correction.");
         ReportValidator.Draft(copy, template);
         await CheckDoctor(copy, ct);
-        return await reports.Append(id, request.ExpectedRevision, copy, request.Reason, ReportState.Draft, "", actor, ct);
+        return await reports.Append(id, request.ExpectedRevision, copy, reason, ReportState.Draft, "", actor, ct);
     }
     public async Task<ReportRevision> Issue(Guid id, IssueReportRequest request, Actor actor, CancellationToken ct)
     {
