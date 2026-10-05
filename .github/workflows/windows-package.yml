@@ -21,7 +21,9 @@ jobs:
         run: ./packaging/windows/Build-Package.ps1
       - name: Install, provision, restart, repair and uninstall test
         shell: pwsh
-        run: ./packaging/windows/Test-Installation.ps1 -PackageRoot ./artifacts/windows-package/installers
+        run: |
+          try { ./packaging/windows/Test-Installation.ps1 -PackageRoot ./artifacts/windows-package/installers }
+          catch { Write-Host $_.ScriptStackTrace; throw }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installers

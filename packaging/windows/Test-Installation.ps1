@@ -90,7 +90,7 @@ $draft = @{ TemplateVersionId=$template.versionId; Metadata=@{ Patient=$patient;
 $report = Api 'reports' @{ OperationId=[Guid]::NewGuid().ToString(); CaseId=$case.id; Draft=$draft } $headers
 $document = Api "reports/$($report.reportId)/documents/pdf" @{} $headers
 $pdf = Invoke-WebRequest "$endpoint/documents/$($document.id)" -Headers $headers
-Assert ($pdf.Headers.'Content-Type' -like 'application/pdf*') 'Installed report PDF could not be downloaded.'
+Assert (($pdf.Headers.'Content-Type' -join ',') -eq 'application/pdf') 'Installed report PDF could not be downloaded.'
 $ownerHash = (Get-FileHash (Join-Path $data 'administration/owner.dpapi')).Hash
 $hostHash = (Get-FileHash (Join-Path $data 'host/settings.dpapi')).Hash
 Stop-Service AKReportingHost
