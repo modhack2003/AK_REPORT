@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
     <None Include="../../database/grant-runtime.sql" Link="grant-runtime.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/golden-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../src/AkReporting.Desktop/WorkspaceNavigation.cs" Link="Desktop/WorkspaceNavigation.cs" />
   </ItemGroup>
   <ItemGroup><Using Include="Xunit" /></ItemGroup>
 </Project>

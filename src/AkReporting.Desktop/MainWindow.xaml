@@ -36,7 +36,7 @@
                 <CheckBox x:Name="UnderlineBox" Content="Underline" Margin="8" Checked="Editor_Changed" Unchecked="Editor_Changed"/><ComboBox x:Name="AlignmentBox" Width="100" SelectionChanged="Editor_Changed"/></WrapPanel>
               <TextBlock Text="Correction / save reason"/><TextBox x:Name="Reason" MaxLength="2000"/>
               <TextBlock Text="Center authorization basis (required only when issuing)"/><TextBox x:Name="AuthorizationBasis" MaxLength="4000"/>
-              <WrapPanel><Button Content="Save new revision" Click="Save_Click"/><Button Content="Issue reviewed configuration" Click="Issue_Click"/><Button Content="Load revision history" Click="History_Click"/></WrapPanel>
+              <WrapPanel><Button Content="Save new revision" Click="Save_Click"/><Button Content="Issue reviewed configuration" Click="Issue_Click"/><Button Content="Load revision history" Click="History_Click"/><Button Content="Load latest saved revision" Click="Reload_Click"/></WrapPanel>
               <ComboBox x:Name="History" DisplayMemberPath="Number" SelectionChanged="History_Changed"/>
             </StackPanel>
             <ScrollViewer VerticalScrollBarVisibility="Auto"><local:ResultEditor x:Name="ResultsEditor"/></ScrollViewer>
