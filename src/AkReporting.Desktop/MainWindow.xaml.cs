@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -21,6 +22,7 @@ namespace AkReporting.Desktop
         private TemplateDefinition? template;
         private List<TemplateDefinition> templates = new List<TemplateDefinition>();
         private List<DoctorVersion> doctors = new List<DoctorVersion>();
+        private readonly WorkspaceNavigation navigation = new WorkspaceNavigation();
         private readonly Dictionary<string, CreateReportRequest> pendingReports = new Dictionary<string, CreateReportRequest>();
         private Guid caseOperation = Guid.NewGuid();
         private PagePlan? plan;
@@ -31,6 +33,7 @@ namespace AkReporting.Desktop
         private DateTime lastHeartbeat = DateTime.MinValue;
         private bool heartbeatBusy;
         private int caseOffset;
+        private string caseQuery = "";
         public MainWindow()
         {
             InitializeComponent();
@@ -58,22 +61,31 @@ namespace AkReporting.Desktop
                 }
             };
             timer.Start();
-            Closed += (_, __) => { timer.Stop(); InputManager.Current.PreProcessInput -= InputActivity; api?.Dispose(); };
-            Closing += (_, e) => { if (dirty && !Discard()) e.Cancel = true; };
+            Closed += (_, __) => { navigation.Invalidate(); timer.Stop(); InputManager.Current.PreProcessInput -= InputActivity; api?.Dispose(); };
+            Closing += (_, e) => { if (!Discard()) e.Cancel = true; };
             loading = false;
         }
         private void InputActivity(object sender, PreProcessInputEventArgs args) => lastInput = DateTime.UtcNow;
         private void MarkDirty() { if (!loading) { dirty = true; plan = null; Preview.Document = null; } }
-        private bool Discard() => !dirty || MessageBox.Show("Discard unsaved entries and load the selected saved record?", "Unsaved entries", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
+        private bool Discard() => !(dirty || Reason.Text.Length > 0 || AuthorizationBasis.Text.Length > 0) ||
+            MessageBox.Show("Discard the unsaved entries in the current editor?", "Unsaved entries", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
         private async Task Run(Func<Task> action)
         {
             if (busy) return;
             busy = true; Root.IsEnabled = false;
             try { await action(); }
-            catch (ApiException e) { if ((int)e.Status == 401) LockSession(e.Message); else Status.Text = e.Message; }
+            catch (ApiException e)
+            {
+                if ((int)e.Status == 401) LockSession(e.Message);
+                else Status.Text = e.Message + ((int)e.Status == 409 && current != null
+                    ? " Your entries remain in the editor. Use Load latest saved revision to review the saved record before re-entering your correction." : "");
+            }
+            catch (HttpRequestException) { HostUnavailable(); }
+            catch (TaskCanceledException) { HostUnavailable(); }
             catch (Exception e) { Status.Text = e is ArgumentException || e is InvalidOperationException || e is FormatException ? e.Message : "Operation failed. Check the application host, network, printer or selected protected folder."; }
             finally { busy = false; Root.IsEnabled = true; }
         }
+        private void HostUnavailable() => Status.Text = "The application host is unavailable or the request timed out. Current editor entries remain on screen. After a save attempt, load the latest saved revision to check whether it completed.";
         private async void Login_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             if (!Discard()) return;
@@ -89,7 +101,7 @@ namespace AkReporting.Desktop
             if (api.Role == "Administrator") { Tabs.SelectedIndex = 3; }
             else
             {
-                caseOffset = 0; Cases.ItemsSource = await api.Get<List<CaseSummary>>("cases");
+                caseOffset = 0; caseQuery = ""; Cases.ItemsSource = await api.Get<List<CaseSummary>>("cases");
                 if (api.Role != "Receptionist")
                 {
                     templates = await api.Get<List<TemplateDefinition>>("templates");
@@ -107,23 +119,53 @@ namespace AkReporting.Desktop
         });
         private void LockSession(string message)
         {
-            loading = true; api?.ClearSession(); Workspace.IsEnabled = false; current = null; selectedCase = null; selectedReport = null;
+            navigation.Invalidate();
+            loading = true; api?.ClearSession(); Workspace.IsEnabled = false; current = null; selectedCase = null; selectedReport = null; template = null;
             Cases.ItemsSource = null; Reports.ItemsSource = null; Investigations.ItemsSource = null; Doctors.ItemsSource = null; History.ItemsSource = null;
             ResultsEditor.ClearProtectedState(); Metadata.Load(new ReportMetadata()); Catalog.ClearProtectedState(); Preview.Document = null; plan = null;
             templates.Clear(); doctors.Clear(); CaseQuery.Clear(); Reason.Clear(); AuthorizationBasis.Clear(); ReportTitle.Text = "Select a saved report";
-            pendingReports.Clear(); caseOperation = Guid.NewGuid(); dirty = false; loading = false; Status.Text = message;
+            pendingReports.Clear(); caseOperation = Guid.NewGuid(); caseOffset = 0; caseQuery = ""; dirty = false; loading = false; Status.Text = message;
+        }
+        private void ClearReportEditor()
+        {
+            current = null; selectedReport = null; template = null;
+            History.ItemsSource = null; Doctors.ItemsSource = null;
+            ResultsEditor.ClearProtectedState(); Metadata.Load(new ReportMetadata()); Preview.Document = null; plan = null;
+            Reason.Clear(); AuthorizationBasis.Clear(); ReportTitle.Text = "Select a saved report"; dirty = false;
         }
         private void ClearReportSelection()
         {
-            loading = true; current = null; selectedCase = null; selectedReport = null; template = null;
-            Cases.SelectedItem = null; Reports.ItemsSource = null; History.ItemsSource = null; Doctors.ItemsSource = null;
-            ResultsEditor.ClearProtectedState(); Metadata.Load(new ReportMetadata()); Preview.Document = null; plan = null;
-            Reason.Clear(); AuthorizationBasis.Clear(); ReportTitle.Text = "Select a saved report";
-            dirty = false; loading = false;
+            loading = true;
+            try { ClearReportEditor(); selectedCase = null; Cases.SelectedItem = null; Reports.ItemsSource = null; }
+            finally { loading = false; }
         }
-        private async void Refresh_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (!Discard()) return; ClearReportSelection(); caseOffset = 0; Cases.ItemsSource = await api!.Get<List<CaseSummary>>("cases"); });
-        private async void Search_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (!Discard()) return; ClearReportSelection(); caseOffset = 0; Cases.ItemsSource = await api!.Post<List<CaseSummary>>("cases/search", new CaseSearchRequest { Query = CaseQuery.Text }); });
-        private async void Older_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (!Discard()) return; ClearReportSelection(); caseOffset += 100; Cases.ItemsSource = await api!.Post<List<CaseSummary>>("cases/search", new CaseSearchRequest { Query = CaseQuery.Text, Offset = caseOffset }); });
+        private void RestoreSelections()
+        {
+            loading = true;
+            try
+            {
+                Cases.SelectedItem = selectedCase; Reports.SelectedItem = selectedReport;
+                History.SelectedItem = (History.ItemsSource as IEnumerable<ReportRevision>)?.SingleOrDefault(r => r.Id == current?.Id);
+            }
+            finally { loading = false; }
+        }
+        private async Task LoadCasePage(CaseSearchRequest request)
+        {
+            await navigation.TryReplace(async () =>
+            {
+                var cases = await api!.Post<List<CaseSummary>>("cases/search", request);
+                if (cases == null) throw new InvalidOperationException("The application host returned no case list. Current entries have been retained.");
+                return cases;
+            }, Discard, cases =>
+            {
+                ClearReportSelection(); caseOffset = request.Offset; caseQuery = request.Query;
+                CaseQuery.Text = caseQuery; Cases.ItemsSource = cases;
+                Status.Text = "Saved case page loaded. Select a case to open its separate reports.";
+            }, RestoreSelections);
+        }
+        private async void Refresh_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest()));
+        private async void Search_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest { Query = CaseQuery.Text }));
+        private async void Older_Click(object sender, RoutedEventArgs e) => await Run(() => LoadCasePage(new CaseSearchRequest { Query = caseQuery, Offset = caseOffset + 100 }));
         private void NewCase_Click(object sender, RoutedEventArgs e) { if (!Discard()) return; ClearReportSelection(); caseOperation = Guid.NewGuid(); Tabs.SelectedIndex = 0; }
         private async void Create_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
@@ -167,36 +209,72 @@ namespace AkReporting.Desktop
         private async void Cases_Changed(object sender, SelectionChangedEventArgs e)
         {
             if (loading || busy || Cases.SelectedItem is not CaseSummary c) return;
-            if (!Discard()) { loading = true; Cases.SelectedItem = selectedCase; loading = false; return; }
             await Run(async () =>
             {
-                selectedCase = c; current = null; selectedReport = null; dirty = false;
-                Metadata.Load(new ReportMetadata { Patient = c.Patient }); ResultsEditor.Children.Clear(); Preview.Document = null; plan = null;
-                if (api!.Role != "Receptionist") Reports.ItemsSource = await api.Get<List<ReportSummary>>("cases/" + c.Id + "/reports");
+                await navigation.TryReplace(async () =>
+                {
+                    var reports = api!.Role == "Receptionist" ? new List<ReportSummary>() : await api.Get<List<ReportSummary>>("cases/" + c.Id + "/reports");
+                    if (reports == null || reports.Any(r => r.CaseId != c.Id)) throw new InvalidOperationException("The application host returned an invalid report list. Current entries have been retained.");
+                    return reports;
+                }, Discard, reports =>
+                {
+                    loading = true;
+                    try
+                    {
+                        ClearReportEditor(); selectedCase = c; Cases.SelectedItem = c;
+                        Metadata.Load(new ReportMetadata { Patient = c.Patient }); Reports.ItemsSource = reports;
+                        Status.Text = "Saved case loaded. Select a report or add investigations.";
+                    }
+                    finally { loading = false; }
+                }, RestoreSelections);
             });
         }
         private async void Reports_Changed(object sender, SelectionChangedEventArgs e)
         {
             if (loading || busy || Reports.SelectedItem is not ReportSummary r) return;
-            if (!Discard()) { loading = true; Reports.SelectedItem = selectedReport; loading = false; return; }
-            await Run(async () => { selectedReport = r; await LoadRevision(await api!.Get<ReportRevision>("reports/" + r.Id)); Tabs.SelectedIndex = 1; });
+            await Run(async () =>
+            {
+                await navigation.TryReplace(() => FetchLatestRevision(r.Id), Discard, revision =>
+                {
+                    LoadRevision(revision); selectedReport = r; r.CurrentRevision = revision.Number;
+                    Tabs.SelectedIndex = 1; Status.Text = "Latest saved report revision loaded.";
+                }, RestoreSelections);
+            });
         }
-        private Task LoadRevision(ReportRevision revision)
+        private TemplateDefinition TemplateFor(ReportRevision revision) => templates.SingleOrDefault(t => t.VersionId == revision.Data.TemplateVersionId) ??
+            throw new InvalidOperationException("The pinned template version is unavailable. Current entries have been retained. Reconnect to refresh the catalog.");
+        private ReportRevision ValidateRevision(ReportRevision revision, Guid reportId)
         {
-            loading = true; current = revision; template = templates.Single(t => t.VersionId == revision.Data.TemplateVersionId);
-            Metadata.Load(revision.Data.Metadata); ResultsEditor.Load(template, revision.Data);
+            if (revision == null || revision.ReportId != reportId || revision.CaseId != selectedCase?.Id || revision.Data == null ||
+                revision.Data.Metadata == null || revision.Data.Metadata.Patient == null || revision.Data.Formatting == null || revision.Data.Results == null)
+                throw new InvalidOperationException("The application host returned an invalid revision. Current entries have been retained.");
+            TemplateFor(revision);
+            return revision;
+        }
+        private async Task<ReportRevision> FetchLatestRevision(Guid reportId) => ValidateRevision(await api!.Get<ReportRevision>("reports/" + reportId), reportId);
+        private void LoadRevision(ReportRevision revision, bool preserveHistory = false)
+        {
+            var selectedTemplate = TemplateFor(revision);
             var options = new List<DoctorVersion> { new DoctorVersion { Id = Guid.Empty, DisplayName = "[No doctor selected]" } };
             options.AddRange(doctors.Where(d => d.Active));
             if (revision.Data.DoctorVersionId is Guid pinned && options.All(d => d.Id != pinned))
                 options.Add(new DoctorVersion { Id = pinned, DisplayName = "Pinned historical doctor version: " + pinned });
-            Doctors.ItemsSource = options; Doctors.SelectedItem = options.Single(d => d.Id == (revision.Data.DoctorVersionId ?? Guid.Empty));
-            FontSizeBox.Text = revision.Data.Formatting.FontSize.ToString(CultureInfo.InvariantCulture);
-            FontFamilyBox.SelectedItem = revision.Data.Formatting.FontFamily;
-            BoldBox.IsChecked = revision.Data.Formatting.Bold; ItalicBox.IsChecked = revision.Data.Formatting.Italic; UnderlineBox.IsChecked = revision.Data.Formatting.Underline;
-            AlignmentBox.SelectedItem = revision.Data.Formatting.Alignment;
-            ReportTitle.Text = revision.PublicNumber + " • revision " + revision.Number + " • " + revision.State + " • " + template.Title + " v" + template.Version;
-            Reason.Clear(); AuthorizationBasis.Clear(); Preview.Document = null; plan = null; dirty = false; loading = false;
-            return Task.CompletedTask;
+            loading = true;
+            try
+            {
+                Metadata.Load(revision.Data.Metadata); ResultsEditor.Load(selectedTemplate, revision.Data);
+                Doctors.ItemsSource = options; Doctors.SelectedItem = options.Single(d => d.Id == (revision.Data.DoctorVersionId ?? Guid.Empty));
+                FontSizeBox.Text = revision.Data.Formatting.FontSize.ToString(CultureInfo.InvariantCulture);
+                FontFamilyBox.SelectedItem = revision.Data.Formatting.FontFamily;
+                BoldBox.IsChecked = revision.Data.Formatting.Bold; ItalicBox.IsChecked = revision.Data.Formatting.Italic; UnderlineBox.IsChecked = revision.Data.Formatting.Underline;
+                AlignmentBox.SelectedItem = revision.Data.Formatting.Alignment;
+                ReportTitle.Text = revision.PublicNumber + " • revision " + revision.Number + " • " + revision.State + " • " + selectedTemplate.Title + " v" + selectedTemplate.Version;
+                current = revision; template = selectedTemplate;
+                if (!preserveHistory) History.ItemsSource = null;
+                else History.SelectedItem = revision;
+                Reason.Clear(); AuthorizationBasis.Clear(); Preview.Document = null; plan = null; dirty = false;
+            }
+            finally { loading = false; }
         }
         private ReportDraft Draft()
         {
@@ -217,18 +295,60 @@ namespace AkReporting.Desktop
         private async void Save_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             RequireCurrent(false);
-            var saved = await api!.Post<ReportRevision>("reports/" + current!.ReportId + "/revisions", new SaveRevisionRequest { ExpectedRevision = current.Number, Reason = Reason.Text, Draft = Draft() });
-            selectedReport!.CurrentRevision = saved.Number; await LoadRevision(saved); Status.Text = "Revision " + saved.Number + " saved. Previous revisions preserved.";
+            var report = selectedReport!;
+            var request = new SaveRevisionRequest { ExpectedRevision = current!.Number, Reason = Reason.Text, Draft = Draft() };
+            await navigation.TryReplace(() => api!.Post<ReportRevision>("reports/" + report.Id + "/revisions", request), () => true, saved =>
+            {
+                LoadRevision(ValidateRevision(saved, report.Id)); report.CurrentRevision = saved.Number;
+                Status.Text = "Revision " + saved.Number + " saved. Previous revisions preserved.";
+            }, RestoreSelections);
         });
         private async void Issue_Click(object sender, RoutedEventArgs e) => await Run(async () =>
         {
             RequireCurrent(false); if (dirty) throw new ArgumentException("Save the corrected draft before issuing.");
-            var issued = await api!.Post<ReportRevision>("reports/" + current!.ReportId + "/issue", new IssueReportRequest { ExpectedRevision = current.Number, Reason = Reason.Text, AuthorizationBasis = AuthorizationBasis.Text });
-            selectedReport!.CurrentRevision = issued.Number; await LoadRevision(issued); Status.Text = "Issued revision " + issued.Number + " saved with the recorded center authorization basis.";
+            var report = selectedReport!;
+            var request = new IssueReportRequest { ExpectedRevision = current!.Number, Reason = Reason.Text, AuthorizationBasis = AuthorizationBasis.Text };
+            await navigation.TryReplace(() => api!.Post<ReportRevision>("reports/" + report.Id + "/issue", request), () => true, issued =>
+            {
+                LoadRevision(ValidateRevision(issued, report.Id)); report.CurrentRevision = issued.Number;
+                Status.Text = "Issued revision " + issued.Number + " saved with the recorded center authorization basis.";
+            }, RestoreSelections);
         });
-        private async void History_Click(object sender, RoutedEventArgs e) => await Run(async () => { RequireCurrent(true); History.ItemsSource = await api!.Get<List<ReportRevision>>("reports/" + current!.ReportId + "/history"); });
+        private async void Reload_Click(object sender, RoutedEventArgs e) => await Run(async () =>
+        {
+            if (current == null || selectedReport == null) throw new ArgumentException("Select a saved report first.");
+            var report = selectedReport;
+            if (await navigation.TryReplace(() => FetchLatestRevision(report.Id), Discard, revision =>
+            {
+                LoadRevision(revision); report.CurrentRevision = revision.Number;
+            }, RestoreSelections)) Status.Text = "Latest saved revision loaded. Review it before re-entering a correction; no entries were merged automatically.";
+        });
+        private async void History_Click(object sender, RoutedEventArgs e) => await Run(async () =>
+        {
+            if (current == null) throw new ArgumentException("Select a saved report first.");
+            var reportId = current.ReportId; var revisionId = current.Id;
+            await navigation.TryReplace(async () =>
+            {
+                var history = await api!.Get<List<ReportRevision>>("reports/" + reportId + "/history");
+                if (history == null || history.Any(r => r.ReportId != reportId)) throw new InvalidOperationException("The application host returned an invalid revision history.");
+                return history;
+            }, () => true, history =>
+            {
+                loading = true;
+                try { History.ItemsSource = history; History.SelectedItem = history.SingleOrDefault(r => r.Id == revisionId); }
+                finally { loading = false; }
+                Status.Text = "Revision history loaded. Selecting a revision replaces the editor after confirmation of unsaved entries.";
+            }, RestoreSelections);
+        });
         private async void History_Changed(object sender, SelectionChangedEventArgs e)
-        { if (!loading && !busy && History.SelectedItem is ReportRevision r && Discard()) await Run(() => LoadRevision(r)); }
+        {
+            if (loading || busy || History.SelectedItem is not ReportRevision r || selectedReport == null) return;
+            await Run(async () =>
+            {
+                await navigation.TryReplace(() => Task.FromResult(ValidateRevision(r, selectedReport.Id)), Discard,
+                    revision => LoadRevision(revision, preserveHistory: true), RestoreSelections);
+            });
+        }
         private void Editor_Changed(object sender, RoutedEventArgs e) => MarkDirty();
         private async Task PreviewSaved()
         {
