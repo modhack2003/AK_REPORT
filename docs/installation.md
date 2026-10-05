@@ -8,7 +8,7 @@ The new offline x64 installer packages the client, self-contained API/setup runt
 
 Download the `windows-installers` artifact from a successful **Windows installation package** workflow. Run the **Setup** executable on each independent Windows 10/11 test PC; the **Client** executable is for an already configured host. Offline operation includes installation after download. Framework 4.8 remains a checked system prerequisite.
 
-Data and machine-protected configuration live outside the application directory in `%ProgramData%\AK Diagnostic Reporting`. Uninstall removes this package's services/binaries and its local certificate trust, while preserving the database/configuration. Reinstall in the original folder and run **Repair existing setup**. DPAPI recovery secrets do not transfer to another Windows installation; use database backup/restore for moving hosts.
+Data and machine-protected configuration live outside the application directory in `%ProgramData%\AK Diagnostic Reporting`. Default uninstall preserves the database/configuration. The explicit **Remove everything** option also deletes local reports, accounts, logo and configuration permanently. Reinstall in the original folder and run **Repair existing setup** when preserving data. DPAPI recovery secrets do not transfer to another Windows installation; use database backup/restore for moving hosts. See [operator guide](operator-guide.md) for logo upload, the shared login, guided reporting and doctor/signature management.
 
 The manually provisioned deployment below is still available for separately managed LAN installations. The local installer does not automatically configure LAN certificates, listeners or firewall exposure.
 

@@ -30,7 +30,8 @@ namespace AkReporting.Desktop
             foreach (var section in template.Sections)
             {
                 var content = new StackPanel { Margin = new Thickness(10) };
-                Children.Add(new Expander { Header = section.Title, Content = content, IsExpanded = true, Margin = new Thickness(0, 4, 0, 10) });
+                Children.Add(new Expander { Header = section.Title + (section.Optional ? " (optional)" : ""), Content = content,
+                    IsExpanded = !section.Optional || draft.Results.Any(r => r.SectionCode == section.Code), Margin = new Thickness(0, 4, 0, 10) });
                 if (section.Optional)
                 {
                     var hide = new CheckBox { Content = "Hide only when empty", IsChecked = draft.Formatting.HiddenSections.Contains(section.Code) };
@@ -46,7 +47,7 @@ namespace AkReporting.Desktop
                     {
                         var next = cells.Where(c => c.Section == section).Max(c => c.Row) + 1;
                         if (next > 999) throw new ArgumentException("Maximum table rows reached.");
-                        AddRow(content, section, next, new List<ReportResult>()); Changed(this, new RoutedEventArgs());
+                        content.Children.Remove(add); AddRow(content, section, next, new List<ReportResult>()); content.Children.Add(add); Changed(this, new RoutedEventArgs());
                     };
                     content.Children.Add(add);
                 }
@@ -74,6 +75,7 @@ namespace AkReporting.Desktop
                     text.TextChanged += (_, __) => Changed(this, new RoutedEventArgs()); input = text;
                 }
                 var cell = new Cell { Section = section, Field = field, Row = row, Input = input };
+                System.Windows.Automation.AutomationProperties.SetAutomationId(input, "Result_" + section.Code + "_" + field.Code + "_" + row);
                 if (field.Kind == ResultKind.Numeric && field.AllowComparator)
                 {
                     cell.Comparator = new ComboBox { ItemsSource = new[] { "", "<", "<=", ">", ">=" }, SelectedItem = value?.Comparator ?? "" };

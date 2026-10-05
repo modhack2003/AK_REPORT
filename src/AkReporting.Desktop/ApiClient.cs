@@ -31,7 +31,9 @@ namespace AkReporting.Desktop
         }
         public async Task Login(string username, string password)
         {
-            var response = await Post<LoginResponse>("auth/login", new LoginRequest { Username = username, Password = password });
+            LoginResponse response;
+            try { response = await Post<LoginResponse>("auth/login", new LoginRequest { Username = username, Password = password }); }
+            catch (ApiException error) when (error.Status == HttpStatusCode.Unauthorized) { throw new ApiException(error.Status, "The username or password is incorrect. Try again."); }
             token = response.Token; Role = response.Role;
         }
         public async Task Logout()

@@ -33,7 +33,9 @@ Assert ($process.ExitCode -in @(0,3010)) 'Installer returned an error.'
 Assert (Test-Path $setup) 'First-run setup utility is missing.'
 $adminPassword = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
 $writerPassword = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-$credentials = @{ AdministratorName='install_qa_admin'; AdministratorPassword=$adminPassword; WriterName='install_qa_writer'; WriterPassword=$writerPassword } | ConvertTo-Json
+# Synthetic single-pixel logo for installation plumbing only, not an actual AK logo.
+$logo = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1kAAAAASUVORK5CYII='
+$credentials = @{ AdministratorName='install_qa_admin'; AdministratorPassword=$adminPassword; WriterName='install_qa_writer'; WriterPassword=$writerPassword; LogoPng=$logo } | ConvertTo-Json
 Run-Setup @('--initialize-stdin') $credentials
 foreach ($service in @('AKReportingDatabase','AKReportingHost')) {
     Assert ((Get-Service $service).Status -eq 'Running') "$service is not running."
@@ -41,6 +43,11 @@ foreach ($service in @('AKReportingDatabase','AKReportingHost')) {
     Assert ($details.StartName -eq 'NT AUTHORITY\LocalService') 'Service must not run as LocalSystem or the installing user.'
 }
 Assert ((Api 'health/live').status -eq 'running') 'HTTPS host readiness failed.'
+$logoFile = Join-Path $data 'branding/logo.png'
+Assert (Test-Path $logoFile) 'First-run supplied logo was not installed.'
+$logoHash = (Get-FileHash $logoFile).Hash
+$logoAcl = Get-Acl $logoFile
+Assert (@($logoAcl.Access | Where-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -eq 'S-1-5-32-545' -and $_.AccessControlType -eq 'Allow' }).Count -gt 0) 'Normal Windows users cannot read the supplied logo.'
 Assert (-not (Test-Path (Join-Path $data 'administration/initialization'))) 'Temporary initialization password folder remained.'
 $roots = @(Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like 'CN=AK Reporting Local *')
 Assert ($roots.Count -eq 1 -and -not $roots[0].HasPrivateKey) 'Local trust anchor must have no retained private key.'
@@ -70,6 +77,17 @@ try {
     Assert (-not $client.HasExited) 'Installed net48 client exited during startup.'
     Assert ($client.MainWindowTitle -like '*A K Diagnostic Reporting*') 'Installed reporting workspace did not create its main window.'
 } finally { if (-not $client.HasExited) { $client.Kill(); $client.WaitForExit() }; $client.Dispose() }
+$uiStart = [Diagnostics.ProcessStartInfo]::new('powershell.exe')
+$uiStart.UseShellExecute = $false; $uiStart.RedirectStandardInput = $true
+$uiStart.RedirectStandardOutput = $true; $uiStart.RedirectStandardError = $true
+foreach ($argument in @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Test-Desktop.ps1'),'-ClientPath',(Join-Path $install 'client/AkReporting.Desktop.exe'),'-EvidenceRoot',(Join-Path $PSScriptRoot '../../artifacts/operator-ui-preview'))) { $uiStart.ArgumentList.Add($argument) }
+$ui = [Diagnostics.Process]::Start($uiStart)
+$uiOut = $ui.StandardOutput.ReadToEndAsync(); $uiError = $ui.StandardError.ReadToEndAsync()
+$ui.StandardInput.Write($credentials); $ui.StandardInput.Close()
+if (-not $ui.WaitForExit(300000)) { $ui.Kill($true); throw 'Installed UI test timed out.' }
+Write-Host ($uiOut.GetAwaiter().GetResult())
+Assert ($ui.ExitCode -eq 0) ('Installed UI test failed: ' + $uiError.GetAwaiter().GetResult())
+$ui.Dispose()
 foreach ($path in @('host/settings.dpapi','administration/owner.dpapi')) {
     $file = Join-Path $data $path
     Assert (Test-Path $file) 'Protected configuration missing.'
@@ -107,6 +125,7 @@ Assert ((Api "reports/$($report.reportId)?revision=1" -Headers $headers).id -eq 
 $download = Api "reports/$($report.reportId)/documents/pdf" @{} $headers
 Assert ($download.sha256 -eq $document.sha256) 'Repair changed the pinned historical document hash.'
 Assert ((Get-FileHash (Join-Path $data 'administration/owner.dpapi')).Hash -eq $ownerHash) 'Repair rotated/deleted database credentials.'
+Assert ((Get-FileHash $logoFile).Hash -eq $logoHash) 'Repair changed the supplied logo.'
 # Tampered ciphertext must not authenticate as valid configuration; never save secrets in artifacts.
 $hostFile = Join-Path $data 'host/settings.dpapi'
 $original = [IO.File]::ReadAllBytes($hostFile)
@@ -146,4 +165,13 @@ Assert ($null -eq (Get-Service AKReportingHost -ErrorAction SilentlyContinue)) '
 $clientRemoved = Start-Process (Join-Path $clientRoot 'Uninstall.exe') -ArgumentList @('/S',"_?=$clientRoot") -Wait -PassThru
 Assert ($clientRemoved.ExitCode -eq 0) 'Client-only uninstall failed.'
 Assert (Test-Path (Join-Path $data 'postgres-data/PG_VERSION')) 'Client-only uninstall affected retained server data.'
-Write-Host 'PASS: offline full/client packages, installed WPF launch, chosen accounts, trusted HTTPS, separate services, protected secrets, report/PDF, restart, repair, tamper rejection, uninstall/reinstall retention.'
+# Complete removal is explicitly requested; default uninstall above preserved reports.
+$purged = Start-Process $uninstall -ArgumentList @('/S','/PURGE') -Wait -PassThru
+Assert ($purged.ExitCode -eq 0) 'Complete-removal uninstall failed.'
+$purgeDeadline = [DateTime]::UtcNow.AddSeconds(90)
+while (((Test-Path $data) -or (Test-Path $install)) -and [DateTime]::UtcNow -lt $purgeDeadline) { Start-Sleep -Milliseconds 500 }
+Assert (-not (Test-Path $data)) 'Complete-removal uninstall retained database/accounts/configuration/logo.'
+Assert (-not (Test-Path $install)) 'Complete-removal uninstall retained application files.'
+Assert ($null -eq (Get-Service AKReportingHost -ErrorAction SilentlyContinue)) 'Complete removal left the host service.'
+Assert ($null -eq (Get-Service AKReportingDatabase -ErrorAction SilentlyContinue)) 'Complete removal left the database service.'
+Write-Host 'PASS: offline full/client packages, installed guided UI, logo, chosen accounts, trusted HTTPS, separate services, protected secrets, report/PDF, restart, repair, tamper rejection, uninstall/reinstall retention and complete removal.'

@@ -26,6 +26,9 @@ internal static class WindowsSecurity
             security.AddAccessRule(new FileSystemAccessRule(new NTAccount(account), rights,
                 inherit ? InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit : InheritanceFlags.None,
                 PropagationFlags.None, AccessControlType.Allow));
+        if (string.Equals(Path.GetFullPath(path), AkReporting.Deployment.InstallationPaths.DataRoot, StringComparison.OrdinalIgnoreCase))
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                FileSystemRights.Traverse, AccessControlType.Allow)); // Public branding only; no root listing or secret-file grants.
         new DirectoryInfo(path).SetAccessControl(security);
     }
     public static void RejectReparsePath(string path)

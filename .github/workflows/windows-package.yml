@@ -1,9 +1,9 @@
 name: Windows installation package
 on:
   push:
-    branches: [main, 'agent/astra/windows-installation-*']
+    branches: [main, 'agent/astra/windows-installation-*', 'agent/astra/operator-ux-*']
   pull_request:
-    paths: ['packaging/**', 'src/AkReporting.Deployment/**', 'src/AkReporting.WindowsSetup/**', 'src/AkReporting.Api/**', '.github/workflows/windows-package.yml']
+    paths: ['packaging/**', 'src/AkReporting.Deployment/**', 'src/AkReporting.WindowsSetup/**', 'src/AkReporting.Api/**', 'src/AkReporting.Desktop/**', '.github/workflows/windows-package.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,12 @@ jobs:
           name: windows-installers
           path: artifacts/windows-package/installers
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operator-ui-preview-synthetic-only
+          path: artifacts/operator-ui-preview
+          if-no-files-found: warn
       - name: Safe diagnostic evidence on failure
         if: failure()
         shell: pwsh
