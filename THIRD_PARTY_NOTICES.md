@@ -11,5 +11,8 @@ Review licenses and exact dependency versions as part of release packaging. This
 | Newtonsoft.Json 13.0.4 | net48 HTTP contract serialization | MIT; https://github.com/JamesNK/Newtonsoft.Json |
 | PdfPig 0.1.11 | Independent test-only PDF parsing | Apache-2.0; https://github.com/UglyToad/PdfPig |
 | xUnit / test tooling | Test-only verification | See the packages' included licenses; https://github.com/xunit/xunit |
+| NSIS 3.11 | Windows installer compiler/runtime | zlib/libpng core; LZMA exception; full compiler `COPYING` is bundled as `docs/NSIS-License.txt`; https://nsis.sourceforge.io/License |
+| PostgreSQL 17.11 EDB Windows binaries | Packaged isolated local database | PostgreSQL/server and third-party notices are retained from the archive; https://www.enterprisedb.com/download-postgresql-binaries |
+| Microsoft Visual C++ Redistributable | Native runtime prerequisite | Microsoft distribution terms; original signed redistributable bundled unmodified |
 
 The release dependency inventory must also include transitive packages and the Microsoft runtime/reference assemblies under their applicable distribution terms. Keep applicable notices with installers and offline redistribution media.

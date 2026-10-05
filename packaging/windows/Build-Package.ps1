@@ -14,7 +14,9 @@ New-Item -ItemType Directory -Force -Path $payload,$downloads,$release | Out-Nul
 $dependencies = Get-Content (Join-Path $PSScriptRoot 'dependencies.json') -Raw | ConvertFrom-Json
 function Download-Pinned($Dependency, [string]$Name) {
     $path = Join-Path $downloads $Name
-    if (-not (Test-Path $path)) { Invoke-WebRequest $Dependency.Url -OutFile $path }
+    # SourceForge returns a browser landing page for some PowerShell user agents.
+    # Request the binary download as a CLI client and still require the pinned hash.
+    if (-not (Test-Path $path)) { Invoke-WebRequest $Dependency.Url -UserAgent 'curl/8.0' -OutFile $path }
     $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Dependency.Sha256) { throw "Checksum mismatch: $Name; actual $actual; bytes $((Get-Item $path).Length)" }
     return $path
