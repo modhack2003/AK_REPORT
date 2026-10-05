@@ -41,6 +41,23 @@ foreach ($service in @('AKReportingDatabase','AKReportingHost')) {
     Assert ($details.StartName -eq 'NT AUTHORITY\LocalService') 'Service must not run as LocalSystem or the installing user.'
 }
 Assert ((Api 'health/live').status -eq 'running') 'HTTPS host readiness failed.'
+Assert (-not (Test-Path (Join-Path $data 'administration/initialization'))) 'Temporary initialization password folder remained.'
+$roots = @(Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like 'CN=AK Reporting Local *')
+Assert ($roots.Count -eq 1 -and -not $roots[0].HasPrivateKey) 'Local trust anchor must have no retained private key.'
+$server = @(Get-ChildItem Cert:\LocalMachine\My | Where-Object Issuer -eq $roots[0].Subject)[0]
+Assert $server.HasPrivateKey 'Schannel certificate has no persisted private key.'
+$rsa = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($server)
+try {
+    if ($rsa -is [Security.Cryptography.RSACng]) { $keyFile = Join-Path $env:ProgramData ('Microsoft/Crypto/Keys/' + $rsa.Key.UniqueName) }
+    else { $keyFile = Join-Path $env:ProgramData ('Microsoft/Crypto/RSA/MachineKeys/' + $rsa.CspKeyContainerInfo.UniqueKeyContainerName) }
+    $keyAcl = Get-Acl $keyFile
+    Assert $keyAcl.AreAccessRulesProtected 'HTTPS key inherits public ACLs.'
+    $keyAllowed = @('S-1-5-18','S-1-5-32-544',([Security.Principal.NTAccount]::new('NT SERVICE\AKReportingHost')).Translate([Security.Principal.SecurityIdentifier]).Value)
+    foreach ($rule in $keyAcl.Access) {
+        $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+        Assert ($rule.AccessControlType -ne 'Allow' -or $sid -in $keyAllowed) 'HTTPS private key is accessible outside its approved identities.'
+    }
+} finally { $rsa.Dispose(); $server.Dispose() }
 $client = Start-Process (Join-Path $install 'client/AkReporting.Desktop.exe') -PassThru
 try {
     Start-Sleep -Seconds 3
@@ -103,6 +120,8 @@ $removed = Start-Process $uninstall -ArgumentList @('/S',"_?=$install") -Wait -P
 Assert ($removed.ExitCode -eq 0) 'Uninstall failed.'
 Assert ($null -eq (Get-Service AKReportingHost -ErrorAction SilentlyContinue)) 'Host service remained after uninstall.'
 Assert ($null -eq (Get-Service AKReportingDatabase -ErrorAction SilentlyContinue)) 'Database service remained after uninstall.'
+Assert (-not (Test-Path $keyFile)) 'Uninstall retained the machine HTTPS private key.'
+Assert (@(Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -eq $roots[0].Subject).Count -eq 0) 'Uninstall retained the local trust anchor.'
 Assert (Test-Path (Join-Path $data 'postgres-data/PG_VERSION')) 'Uninstall deleted database data.'
 Assert ((Get-FileHash (Join-Path $data 'administration/owner.dpapi')).Hash -eq $ownerHash) 'Uninstall deleted recovery configuration.'
 $reinstall = Start-Process $installer -ArgumentList '/S' -Wait -PassThru

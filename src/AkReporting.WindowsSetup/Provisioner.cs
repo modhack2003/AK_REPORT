@@ -18,6 +18,12 @@ public sealed class InitialAccounts
     public string WriterPassword { get; set; } = "";
 }
 
+internal sealed class SetupReadinessException(string diagnostic)
+    : InvalidOperationException("API host did not become ready with trusted HTTPS. " + diagnostic)
+{
+    public string Diagnostic { get; } = diagnostic;
+}
+
 internal sealed class Provisioner(string installRoot, Action<string> progress)
 {
     private readonly string install = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar);
@@ -226,6 +232,7 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
                 if (tool.InitializationDiagnostics.Length > 0)
                     summary += "\n" + tool.InitializationDiagnostics[..Math.Min(tool.InitializationDiagnostics.Length, 4000)];
             }
+            else if (error is SetupReadinessException readiness) summary += " | " + readiness.Diagnostic;
             File.AppendAllText(Path.Combine(root, "administration", "setup-status.log"), summary + "\n");
         }
         catch (IOException) { }
@@ -245,13 +252,25 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
     private static async Task WaitForHost()
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        var diagnostic = "No response";
         for (var i = 0; i < 30; i++)
         {
-            try { using var r = await client.GetAsync("https://localhost:7043/health/live"); if (r.IsSuccessStatusCode) return; }
-            catch (HttpRequestException) { }
-            catch (TaskCanceledException) { }
+            try
+            {
+                using var r = await client.GetAsync("https://localhost:7043/health/live");
+                if (r.IsSuccessStatusCode) return;
+                diagnostic = "HTTP " + (int)r.StatusCode;
+            }
+            catch (HttpRequestException error)
+            {
+                // Types/codes only, never exception messages or HTTP response bodies.
+                diagnostic = error.HttpRequestError.ToString();
+                for (Exception? cause = error; cause != null; cause = cause.InnerException)
+                    diagnostic += " / " + cause.GetType().Name + " 0x" + cause.HResult.ToString("X8");
+            }
+            catch (TaskCanceledException) { diagnostic = "HTTPS request timeout"; }
             await Task.Delay(1000);
         }
-        throw new InvalidOperationException("API host did not become ready with trusted HTTPS. Check service status and port 7043.");
+        throw new SetupReadinessException(diagnostic);
     }
 }

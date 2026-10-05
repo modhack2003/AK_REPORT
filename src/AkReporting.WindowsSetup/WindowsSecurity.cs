@@ -38,4 +38,17 @@ internal static class WindowsSecurity
             item = item.Parent;
         }
     }
+    public static void CertificateKeyAcl(string path)
+    {
+        RejectReparsePath(Path.GetDirectoryName(path)!);
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Certificate key cannot be a symbolic link.");
+        var security = new FileSecurity();
+        security.SetAccessRuleProtection(true, false);
+        foreach (var id in new[] { WellKnownSidType.BuiltinAdministratorsSid, WellKnownSidType.LocalSystemSid })
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(id, null), FileSystemRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new FileSystemAccessRule(new NTAccount("NT SERVICE\\" + AkReporting.Deployment.InstallationPaths.HostService),
+            FileSystemRights.Read, AccessControlType.Allow));
+        new FileInfo(path).SetAccessControl(security);
+    }
 }

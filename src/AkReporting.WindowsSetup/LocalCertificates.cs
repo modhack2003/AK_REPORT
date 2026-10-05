@@ -36,11 +36,43 @@ internal static class LocalCertificates
         using var certificate = X509CertificateLoader.LoadCertificate(settings.RootCertificate);
         using var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine); store.Open(OpenFlags.ReadWrite);
         if (store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, false).Count == 0) store.Add(certificate);
+        // Schannel on supported Windows versions needs a persisted private key.
+        // Setup, not LocalService, creates it and restricts its ACL to this service SID.
+        using var publicServer = X509CertificateLoader.LoadPkcs12(settings.ServerPfx, settings.PfxPassword, X509KeyStorageFlags.EphemeralKeySet);
+        using var personal = new X509Store(StoreName.My, StoreLocation.LocalMachine); personal.Open(OpenFlags.ReadWrite);
+        var existing = personal.Certificates.Find(X509FindType.FindByThumbprint, publicServer.Thumbprint, false).OfType<X509Certificate2>().FirstOrDefault(c => c.HasPrivateKey);
+        using var server = existing ?? X509CertificateLoader.LoadPkcs12(settings.ServerPfx, settings.PfxPassword,
+            X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
+        WindowsSecurity.CertificateKeyAcl(KeyPath(server));
+        if (existing == null) personal.Add(server);
     }
     public static void RemoveTrust(InstalledHostSettings settings)
     {
         using var certificate = X509CertificateLoader.LoadCertificate(settings.RootCertificate);
         using var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine); store.Open(OpenFlags.ReadWrite);
         foreach (var existing in store.Certificates.Find(X509FindType.FindByThumbprint, certificate.Thumbprint, false)) store.Remove(existing);
+        using var publicServer = X509CertificateLoader.LoadPkcs12(settings.ServerPfx, settings.PfxPassword, X509KeyStorageFlags.EphemeralKeySet);
+        using var personal = new X509Store(StoreName.My, StoreLocation.LocalMachine); personal.Open(OpenFlags.ReadWrite);
+        foreach (var existing in personal.Certificates.Find(X509FindType.FindByThumbprint, publicServer.Thumbprint, false))
+        {
+            if (existing.HasPrivateKey)
+            {
+                using var key = existing.GetRSAPrivateKey();
+                if (key is RSACng cng) cng.Key.Delete();
+                else if (key is RSACryptoServiceProvider csp) csp.PersistKeyInCsp = false;
+            }
+            personal.Remove(existing); existing.Dispose();
+        }
+    }
+    private static string KeyPath(X509Certificate2 certificate)
+    {
+        using var key = certificate.GetRSAPrivateKey();
+        var crypto = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Microsoft", "Crypto");
+        return key switch
+        {
+            RSACng cng when cng.Key.IsMachineKey => Path.Combine(crypto, "Keys", cng.Key.UniqueName!),
+            RSACryptoServiceProvider csp when csp.CspKeyContainerInfo.MachineKeyStore => Path.Combine(crypto, "RSA", "MachineKeys", csp.CspKeyContainerInfo.UniqueKeyContainerName),
+            _ => throw new InvalidOperationException("The HTTPS certificate requires a Windows machine RSA key.")
+        };
     }
 }
