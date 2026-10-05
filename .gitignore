@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.vs/
+TestResults/
+artifacts/
+.env
+*.user
+*.pfx
+*.key
+appsettings.Local.json
+*.dump
+*.backup
+*.log
