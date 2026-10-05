@@ -1,0 +1,48 @@
+name: Engineering verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AK_TEST_PG: "Host=localhost;Port=5432;Database=postgres;Username=postgres"
+      AK_GOLDEN_OUTPUT: "${{ github.workspace }}/artifacts/golden"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test AkReporting.slnx --configuration Release --logger trx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-golden-documents-and-test-results
+          path: |
+            artifacts/golden
+            tests/**/TestResults
+  windows-client-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build src/AkReporting.Desktop/AkReporting.Desktop.csproj --configuration Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: net48-wpf-compatibility-spike
+          path: src/AkReporting.Desktop/bin/Release/net48
