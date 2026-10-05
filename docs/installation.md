@@ -2,6 +2,16 @@
 
 This is an engineering-validation deployment. Complete the release gates before using it for clinical reports.
 
+## Windows 10/11 test installer
+
+The new offline x64 installer packages the client, self-contained API/setup runtimes, PostgreSQL 17 binaries and a signed Visual C++ prerequisite. First-run setup creates chosen administrator/writer accounts, provisions draft schemas, configures trusted **localhost-only** HTTPS and registers dedicated Windows services. No SDK or separately installed database is required. See [Windows testing instructions](windows-testing.md) and [package design](windows-package-design.md).
+
+Download the `windows-installers` artifact from a successful **Windows installation package** workflow. Run the **Setup** executable on each independent Windows 10/11 test PC; the **Client** executable is for an already configured host. Offline operation includes installation after download. Framework 4.8 remains a checked system prerequisite.
+
+Data and machine-protected configuration live outside the application directory in `%ProgramData%\AK Diagnostic Reporting`. Uninstall removes this package's services/binaries and its local certificate trust, while preserving the database/configuration. Reinstall in the original folder and run **Repair existing setup**. DPAPI recovery secrets do not transfer to another Windows installation; use database backup/restore for moving hosts.
+
+The manually provisioned deployment below is still available for separately managed LAN installations. The local installer does not automatically configure LAN certificates, listeners or firewall exposure.
+
 ## Host prerequisites
 
 Choose a compatible modern Windows 10/11 or Windows Server host for .NET 10 and a current PostgreSQL 17 maintenance release. Verify the exact OS/installer support and center hardware. A Win7 client uses this host over LAN; a supported Win7-only all-in-one host has not been proven.
@@ -51,4 +61,4 @@ Noto Sans and Noto Serif fonts are embedded in the client/PDF. Install the pinne
 6. Measure A4 pad header/footer offsets, update template layout margins, regenerate goldens and accept physical print accuracy.
 7. Execute restart/crash, two-writer, restore and Win7/10/11 checks. Record evidence in release notes before clinical deployment.
 
-Installer packaging, code signing, Windows service installer, unattended upgrades and certified printer calibration remain later production-hardening work.
+Offline test packaging and service provisioning are implemented. Code signing, approved production upgrade/rollback procedures, LAN provisioning and certified printer calibration remain production-hardening work.

@@ -12,6 +12,8 @@ Start with [architecture](docs/architecture.md), [clinical review](docs/medical-
 
 The foundation is integrated into `main` through [PR #2](https://github.com/modhack2003/AK_REPORT/pull/2). [Main verification](https://github.com/modhack2003/AK_REPORT/actions/runs/37276000783) passed the server/PostgreSQL checks and Windows net48 build. The run contains downloadable **synthetic golden documents** and the **WPF compatibility-spike build**. Actual client-OS, printer and clinical acceptance remain pending.
 
+An **offline Windows 10/11 x64 test installer** is available from [the verified package download](docs/windows-installer-evidence.md). Full installation, trusted HTTPS, desktop launch, repair and uninstall/reinstall retention passed on Windows CI. Follow [Windows test instructions](docs/windows-testing.md). Packaging is published for review in [PR #10](https://github.com/modhack2003/AK_REPORT/pull/10).
+
 ## Projects
 
 | Project | Responsibility |

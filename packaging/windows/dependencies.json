@@ -1,0 +1,17 @@
+{
+  "PostgreSql": {
+    "Version": "17.11-1",
+    "Url": "https://get.enterprisedb.com/postgresql/postgresql-17.11-1-windows-x64-binaries.zip",
+    "Sha256": "6eabdf00d2893713b75db4336a23c3fdf505f056e217ec6e2e95d901750cfea3"
+  },
+  "Nsis": {
+    "Version": "3.11",
+    "Url": "https://netix.dl.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11.zip",
+    "Sha256": "c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1"
+  },
+  "VisualCpp": {
+    "Url": "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+    "ExpectedPublisher": "Microsoft Corporation"
+  },
+  "DotNetRuntime": "10.0.12"
+}

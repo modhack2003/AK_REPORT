@@ -45,3 +45,21 @@ dotnet list src/AkReporting.Desktop/AkReporting.Desktop.csproj package --vulnera
 ```
 
 Archive dependency/font manifests and the exact renderer build with each approved deployment. The current renderer uses pinned PDFsharp/OpenXML packages and fixed fonts; reproducibility across a future engine/package update requires a new release decision, while stored historical document bytes remain unchanged.
+
+## Build Windows installation packages
+
+On a Windows build machine with PowerShell 7 and .NET SDK 10:
+
+```powershell
+./packaging/windows/Build-Package.ps1
+```
+
+This downloads hash-pinned PostgreSQL/NSIS tools, validates the Microsoft redistributable signature, publishes pinned self-contained .NET 10.0.12 host/setup payloads, builds the net48 client, and emits `artifacts/windows-package/installers` with full/client EXEs, manifests and instructions. Build requires internet; the resulting setup does not.
+
+On an **isolated clean administrative Windows VM/runner only**:
+
+```powershell
+./packaging/windows/Test-Installation.ps1 -PackageRoot ./artifacts/windows-package/installers
+```
+
+The smoke script refuses existing product data, creates only synthetic account/report input and exercises trusted HTTPS, service identities, secret ACLs, restart, repair, DPAPI tamper rejection and uninstall/reinstall retention. Never run it against a center installation. The workflow uploads only installers/docs/manifests, not the generated secrets or PostgreSQL data. `AkReporting.WindowsSetup` stays outside the cross-platform solution but is built/published by the Windows installer workflow; `AkReporting.Deployment` is part of the API dependency graph.

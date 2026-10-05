@@ -1,0 +1,38 @@
+name: Windows installation package
+on:
+  push:
+    branches: [main, 'agent/astra/windows-installation-*']
+  pull_request:
+    paths: ['packaging/**', 'src/AkReporting.Deployment/**', 'src/AkReporting.WindowsSetup/**', 'src/AkReporting.Api/**', '.github/workflows/windows-package.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-and-install:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build offline installers
+        shell: pwsh
+        run: ./packaging/windows/Build-Package.ps1
+      - name: Install, provision, restart, repair and uninstall test
+        shell: pwsh
+        run: |
+          try { ./packaging/windows/Test-Installation.ps1 -PackageRoot ./artifacts/windows-package/installers }
+          catch { Write-Host $_.ScriptStackTrace; throw }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: artifacts/windows-package/installers
+          if-no-files-found: error
+      - name: Safe diagnostic evidence on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Service AKReportingHost,AKReportingDatabase -ErrorAction SilentlyContinue | Format-Table Name,Status
+          $log = Join-Path $env:ProgramData 'AK Diagnostic Reporting/administration/setup-status.log'
+          if (Test-Path $log) { Get-Content $log }
