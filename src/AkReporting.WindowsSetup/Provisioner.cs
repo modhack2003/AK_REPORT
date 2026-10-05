@@ -72,20 +72,37 @@ internal sealed class Provisioner(string installRoot, Action<string> progress)
                 throw new InvalidOperationException("Interrupted database initialization left nonempty data. Preserve it and consult the recovery guide; no files were deleted.");
             Step("Initializing isolated PostgreSQL cluster");
             var pwfile = Path.Combine(root, "administration", "initdb-password.tmp");
+            // PostgreSQL launches a restricted child token on Windows. Temporarily grant
+            // the installing user's SID, rather than relying on its Administrators group.
+            using var initializer = System.Security.Principal.WindowsIdentity.GetCurrent();
+            WindowsSecurity.DirectoryAcl(cluster, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.Modify, true),
+                (initializer.Name, FileSystemRights.Modify, true));
             try
             {
                 await File.WriteAllTextAsync(pwfile, new NpgsqlConnectionStringBuilder(owner.OwnerConnection).Password, new UTF8Encoding(false));
                 await ServiceOperations.Tool(Path.Combine(pgBin, "initdb.exe"), "-D", cluster, "-U", "ak_owner", "--pwfile=" + pwfile,
                     "--encoding=UTF8", "--locale=C", "--auth-local=scram-sha-256", "--auth-host=scram-sha-256");
-                await File.AppendAllTextAsync(Path.Combine(cluster, "postgresql.conf"),
-                    "\n# A K Reporting isolated local cluster\nlisten_addresses = '127.0.0.1'\nport = 55432\npassword_encryption = 'scram-sha-256'\nlog_statement = 'none'\nlog_min_error_statement = 'panic'\n");
-                await File.WriteAllTextAsync(Path.Combine(cluster, "pg_hba.conf"),
-                    "# Local service connections only; no trust authentication.\nhost all all 127.0.0.1/32 scram-sha-256\n", new UTF8Encoding(false));
             }
-            finally { if (File.Exists(pwfile)) File.Delete(pwfile); }
+            finally
+            {
+                if (File.Exists(pwfile)) File.Delete(pwfile);
+                WindowsSecurity.DirectoryAcl(cluster, ($"NT SERVICE\\{InstallationPaths.DatabaseService}", FileSystemRights.Modify, true));
+            }
         }
         else if ((await File.ReadAllTextAsync(Path.Combine(cluster, "PG_VERSION"))).Trim() != "17")
             throw new InvalidOperationException("This package cannot upgrade a different PostgreSQL major. Preserve the cluster and use a reviewed upgrade procedure.");
+        // Finish configuration even if power was lost after initdb wrote PG_VERSION.
+        // This dedicated package owns its local-only listener/auth fragment; no external cluster is edited.
+        Step("Configuring isolated database listener");
+        ServiceOperations.Stop(InstallationPaths.DatabaseService);
+        var configuration = Path.Combine(cluster, "postgresql.conf");
+        const string include = "include = 'ak-reporting.conf'";
+        if (!(await File.ReadAllTextAsync(configuration)).Contains(include, StringComparison.Ordinal))
+            await File.AppendAllTextAsync(configuration, "\n# Managed local reporting configuration\n" + include + "\n");
+        await File.WriteAllTextAsync(Path.Combine(cluster, "ak-reporting.conf"),
+            "listen_addresses = '127.0.0.1'\nport = 55432\npassword_encryption = 'scram-sha-256'\nlog_statement = 'none'\nlog_min_error_statement = 'panic'\n", new UTF8Encoding(false));
+        await File.WriteAllTextAsync(Path.Combine(cluster, "pg_hba.conf"),
+            "# Managed local service connections only; no trust authentication.\nhost all all 127.0.0.1/32 scram-sha-256\n", new UTF8Encoding(false));
         Step("Starting PostgreSQL and applying migrations");
         ServiceOperations.Start(InstallationPaths.DatabaseService);
         await WaitForDatabase(owner.OwnerConnection);
