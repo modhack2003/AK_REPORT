@@ -15,7 +15,8 @@ $dependencies = Get-Content (Join-Path $PSScriptRoot 'dependencies.json') -Raw |
 function Download-Pinned($Dependency, [string]$Name) {
     $path = Join-Path $downloads $Name
     if (-not (Test-Path $path)) { Invoke-WebRequest $Dependency.Url -OutFile $path }
-    if ((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Dependency.Sha256) { throw "Checksum mismatch: $Name" }
+    $actual = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $Dependency.Sha256) { throw "Checksum mismatch: $Name; actual $actual; bytes $((Get-Item $path).Length)" }
     return $path
 }
 function DotNet([string[]]$Arguments) {
