@@ -22,7 +22,9 @@ function Download-Pinned($Dependency, [string]$Name) {
     return $path
 }
 function DotNet([string[]]$Arguments) {
-    & dotnet @Arguments
+    # PowerShell command names are case-insensitive: call the executable explicitly,
+    # otherwise this helper recursively resolves itself as "dotnet".
+    & dotnet.exe @Arguments
     if ($LASTEXITCODE -ne 0) { throw 'dotnet build/publish failed.' }
 }
 $pgArchive = Download-Pinned $dependencies.PostgreSql 'postgresql.zip'
