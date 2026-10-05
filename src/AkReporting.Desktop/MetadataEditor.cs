@@ -22,12 +22,12 @@ namespace AkReporting.Desktop
         public MetadataEditor()
         {
             Children.Add(new TextBlock { Text = "Patient details", FontSize = 22, FontWeight = FontWeights.SemiBold });
-            Children.Add(new TextBlock { Text = "Only the name, report date and at least one test are needed to start. Everything below Optional details can be left blank.", Margin = new Thickness(0, 8, 0, 20) });
+            Children.Add(new TextBlock { Text = "Name, date and a test are enough to start. Other details are optional.", Margin = new Thickness(0, 8, 0, 12) });
             var required = new Grid(); required.ColumnDefinitions.Add(new ColumnDefinition()); required.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
             var name = Field("name", "Patient name *", 200); name.Margin = new Thickness(0, 0, 24, 0); required.Children.Add(name);
             var date = Labelled("Report date *", reportDate); Grid.SetColumn(date, 1); required.Children.Add(date); Children.Add(required);
             var optional = new StackPanel();
-            Children.Add(new Expander { Header = "Optional details — age, contact ID, referring doctor, sample and notes", Content = optional, IsExpanded = false, Margin = new Thickness(0, 16, 0, 16) });
+            Children.Add(new Expander { Header = "Optional patient / specimen details", Content = optional, IsExpanded = false, Margin = new Thickness(0, 8, 0, 0) });
             var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition());
             var id = Field("id", "Patient ID (optional)", 80); id.Margin = new Thickness(0, 0, 16, 0); row.Children.Add(id);
             var agePanel = new StackPanel { Margin = new Thickness(0, 0, 16, 0) }; agePanel.Children.Add(Field("age", "Age (optional)", 5)); agePanel.Children.Add(ageUnit);

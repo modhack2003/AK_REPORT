@@ -357,7 +357,7 @@ namespace AkReporting.Desktop
                 Status.Text = "Revision " + saved.Number + " saved. Previous revisions preserved.";
             }, RestoreSelections);
         }
-        private async void SavePreview_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (dirty) await SaveDraft(); RequireCurrent(true); await PreviewSaved(); Tabs.SelectedIndex = 2; });
+        private async void SavePreview_Click(object sender, RoutedEventArgs e) => await Run(async () => { if (dirty || Reason.Text.Length > 0) await SaveDraft(); RequireCurrent(true); await PreviewSaved(); Tabs.SelectedIndex = 2; });
         private async void RefreshDoctors_Click(object sender, RoutedEventArgs e) => await Run(RefreshDoctorLibrary);
         private async Task RefreshDoctorLibrary()
         {

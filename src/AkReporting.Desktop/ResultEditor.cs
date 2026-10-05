@@ -75,6 +75,7 @@ namespace AkReporting.Desktop
                     text.TextChanged += (_, __) => Changed(this, new RoutedEventArgs()); input = text;
                 }
                 var cell = new Cell { Section = section, Field = field, Row = row, Input = input };
+                System.Windows.Automation.AutomationProperties.SetAutomationId(input, "Result_" + section.Code + "_" + field.Code + "_" + row);
                 if (field.Kind == ResultKind.Numeric && field.AllowComparator)
                 {
                     cell.Comparator = new ComboBox { ItemsSource = new[] { "", "<", "<=", ">", ">=" }, SelectedItem = value?.Comparator ?? "" };

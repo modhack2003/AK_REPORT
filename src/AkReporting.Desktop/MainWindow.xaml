@@ -1,5 +1,5 @@
 <Window x:Class="AkReporting.Desktop.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:AkReporting.Desktop"
-        Title="A K Diagnostic Reporting" Width="1280" Height="860" MinWidth="1000" MinHeight="690" WindowStartupLocation="CenterScreen" Background="#F3F6FA" FontFamily="Segoe UI" FontSize="14">
+        Title="A K Diagnostic Reporting" Width="1280" Height="860" MinWidth="1000" MinHeight="690" WindowStartupLocation="CenterScreen" Background="#F3F6FA" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="14">
   <Grid x:Name="Root">
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid x:Name="Workspace" Visibility="Collapsed" IsEnabled="False">
@@ -36,7 +36,9 @@
         </Border>
         <TabControl Grid.Column="1" x:Name="Tabs" Background="Transparent" BorderThickness="0" SelectionChanged="Tabs_Changed">
           <TabItem Header="1  Patient &amp; test">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,16,0,0">
+            <DockPanel Margin="0,16,0,0">
+              <Border DockPanel.Dock="Bottom" Background="White" Padding="16,8" Margin="0,10,0,0" CornerRadius="8"><WrapPanel><Button x:Name="CreateButton" Content="Continue to results  →" Style="{StaticResource PrimaryButton}" Click="Create_Click"/><Button x:Name="AddTestsButton" Content="Add tests to this patient" Click="AddReports_Click" Visibility="Collapsed"/></WrapPanel></Border>
+              <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
               <Border Style="{StaticResource Card}"><local:MetadataEditor x:Name="Metadata"/></Border>
               <Border Style="{StaticResource Card}" Margin="0,16,0,0"><StackPanel>
                 <TextBlock Text="Choose tests *" FontSize="22" FontWeight="SemiBold"/>
@@ -47,9 +49,9 @@
                   </CheckBox></DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
                 <TextBlock Text="Draft configurations can be saved, previewed and exported for testing." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,10,0,10"/>
-                <WrapPanel><Button x:Name="CreateButton" Content="Continue to results  →" Style="{StaticResource PrimaryButton}" Click="Create_Click"/><Button x:Name="AddTestsButton" Content="Add tests to this patient" Click="AddReports_Click" Visibility="Collapsed"/></WrapPanel>
               </StackPanel></Border>
-            </StackPanel></ScrollViewer>
+              </StackPanel></ScrollViewer>
+            </DockPanel>
           </TabItem>
           <TabItem x:Name="ResultsTab" Header="2  Results">
             <Border Style="{StaticResource Card}" Margin="0,16,0,0"><DockPanel>

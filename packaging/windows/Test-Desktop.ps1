@@ -77,6 +77,9 @@ try {
     Capture '03-results.png'
     Click 'SaveButton'
     Wait-Until { (Element 'Status').Current.Name -like 'Revision * saved.*' } 'Draft saving unexpectedly required optional input or a save note.'
+    $section = @($cbc.sections | Where-Object { @($_.fields | Where-Object kind -eq 0).Count -gt 0 })[0]
+    $numeric = @($section.fields | Where-Object kind -eq 0)[0]
+    Fill ('Result_' + $section.code + '_' + $numeric.code + '_0') '1.25'
     Click 'SavePreviewButton'
     Wait-Until { (Element 'Status').Current.Name -like 'Saved revision preview:*' } 'Save and preview did not open the saved report.'
     Capture '04-preview.png'
@@ -87,7 +90,9 @@ try {
     $revision = Api "reports/$($reports[0].id)" -Headers $headers
     Assert ($null -eq $revision.data.metadata.patient.age -and $revision.data.metadata.patient.ageUnit -eq '') 'Blank age details were not preserved.'
     Assert ($revision.data.metadata.clinicalHistory -eq '' -and $null -eq $revision.data.metadata.collectionTime) 'Optional notes/collection date unexpectedly became required or populated.'
-    Assert ($revision.data.results.Count -eq 0 -and $revision.number -eq 2) 'Empty draft result save failed or duplicated revisions.'
+    Assert ($revision.data.results.Count -eq 1 -and $revision.number -eq 3 -and $revision.data.results[0].numericValue -eq 1.25) 'Entered numeric result was not saved before preview.'
+    $blankRevision = Api "reports/$($reports[0].id)?revision=2" -Headers $headers
+    Assert ($blankRevision.data.results.Count -eq 0) 'Optional empty results were not preserved in the earlier saved revision.'
     Click 'ManageButton'
     Wait-Until { $null -ne (Element 'Doctor_name') -and (Element 'Doctor_name').Current.IsEnabled } 'Administrator doctor editor did not open.'
     Fill 'Doctor_name' 'SYNTHETIC UI DOCTOR'; Fill 'Doctor_evidence' 'Synthetic UI permission fixture; not an actual clinician.'
