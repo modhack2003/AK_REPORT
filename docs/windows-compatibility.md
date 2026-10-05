@@ -12,6 +12,8 @@ Research accessed 2026-10-05:
 
 `AkReporting.Desktop` is the client compatibility spike and initial workspace. Compile with VS 2022/MSBuild and the net48 developer pack on a build machine. Ship only the runtime dependency to client PCs. Reference assemblies are build-only. Avoid WebView2/Electron and newer WinRT APIs.
 
+Executed engineering evidence: [merged-main CI](https://github.com/modhack2003/AK_REPORT/actions/runs/37276000783) successfully built the net48 WPF client on a Windows-hosted runner. The same project also cross-compiled on Linux. Neither build executes the actual Win7/Win10/Win11 client/printer matrix below.
+
 Run the same artifact on:
 
 | Target | Required evidence | Current status |

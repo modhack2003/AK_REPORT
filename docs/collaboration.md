@@ -26,7 +26,7 @@ Create/claim a GitHub issue or shared-board task **before** working. State the b
 | Clinical research | `docs/medical-review.md`, reviewed template definitions | Qualified center approval required; no fabricated medical values |
 | QA/deployment | `tests/`, workflows, operational guides | Add independent assertions and capture executed evidence |
 
-Initial baseline owner is building the five-report vertical foundation. Other agents can independently collect anonymized center specifications, run Windows compatibility/printer acceptance, and prepare family-specific source review; coordinate before changing shared implementation contracts.
+The five-report foundation is integrated into `main`. Claim the next module/evidence task through the shared issue board; coordinate before changing shared contracts or persistence boundaries.
 
 ## Publish and integrate
 
@@ -41,15 +41,22 @@ Never claim a pushed branch is already merged. Never overwrite remote history. I
 
 ## Current handoff
 
-* Initial architecture/specification is published on `main` at `985635a`.
-* The verified five-report implementation checkpoint is on `agent/astra/five-report-foundation`; fetch that branch to build on its contracts before baseline integration is reviewed.
+* Architecture/specification baseline: `985635a`.
+* Five-report foundation integrated into `main` at `3d2cc85` through [PR #2](https://github.com/modhack2003/AK_REPORT/pull/2).
+* [Main CI](https://github.com/modhack2003/AK_REPORT/actions/runs/37276000783) passed server/PostgreSQL checks and the hosted Windows net48 build. There are 28 passing automated checks and pinned synthetic golden hashes.
 * Center report samples, professional attribution records, letterhead dimensions, first-host OS and qualified clinical approval are outstanding.
 * Five candidate schemas must remain draft. Runtime/printer compatibility remains provisional until actual Windows hardware checks pass.
 * Follow `docs/milestones.md`; do not parallelize dozens of unreviewed report templates ahead of the engine.
 
-To start dependent work from the implementation checkpoint:
+Current next-work lanes:
+
+* [#3 — v1 operator/revision/archive/recovery hardening](https://github.com/modhack2003/AK_REPORT/issues/3): split and claim modules before changing contracts/migrations.
+* [#4 — Windows/physical-printer acceptance](https://github.com/modhack2003/AK_REPORT/issues/4): actual OS/driver/pad evidence; first-host OS decision.
+* [#5 — center-specific medical review](https://github.com/modhack2003/AK_REPORT/issues/5): anonymized center samples, source/SOP reconciliation and actual qualified review.
+
+To start dependent work from the integrated baseline:
 
 ```sh
 git fetch origin
-git switch -c agent/<your-name>/<task> origin/agent/astra/five-report-foundation
+git switch -c agent/<your-name>/<task> origin/main
 ```

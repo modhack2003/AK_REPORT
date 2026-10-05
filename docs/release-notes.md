@@ -15,10 +15,10 @@
 
 * Linux .NET 10.0.401 SDK / 10.0.12 runtime: server Release test run **28 passed, 0 skipped** against real PostgreSQL 17 using a restricted runtime login.
 * Independent PDF parser verifies extracted text and page counts; DOCX validates against OpenXML schemas; repeated generation yields equal bytes for the golden fixtures.
-* WPF/net48 cross-compilation on Linux succeeded with zero warnings/errors. **A Windows-host build and actual Win7/10/11 runtime/printer checks are still separate requirements.**
+* WPF/net48 cross-compilation on Linux succeeded with zero warnings/errors; the hosted **Windows build also passed**. Actual Win7/10/11 runtime/printer acceptance is still pending.
 * NuGet vulnerability audit found no known vulnerable direct/transitive packages in the server solution or desktop project using the queried advisory source.
 
-CI workflow runs server/PostgreSQL checks and a Windows client build on each pushed checkpoint. Update this section with actual CI outcome rather than assuming success.
+CI evidence: [foundation branch run](https://github.com/modhack2003/AK_REPORT/actions/runs/37275790296) and [merged-main run](https://github.com/modhack2003/AK_REPORT/actions/runs/37276000783) both passed server/PostgreSQL verification and the Windows net48 build. Foundation merged through [PR #2](https://github.com/modhack2003/AK_REPORT/pull/2) at `3d2cc85`. Artifacts include synthetic golden PDF/DOCX reports, test results and the WPF build.
 
 ## Pending release evidence
 
